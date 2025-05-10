@@ -71,15 +71,15 @@ export default function Home() {
       }
     });
     
-    // Set interval to periodically re-check for check conditions (helps catch edge cases)
-    // The interval is actually important as it catches issues that might be missed during normal flow
-    const checkInterval = setInterval(() => {
-      // Re-check the board state periodically
-      send({ type: 'CHECK_BOARD' });
-    }, 1500); // More frequent checks for better responsiveness
+    // REMOVED: Set interval to periodically re-check for check conditions (helps catch edge cases)
+    // REMOVED: The interval is actually important as it catches issues that might be missed during normal flow
+    // const checkInterval = setInterval(() => {
+    //   // Re-check the board state periodically
+    //   send({ type: 'CHECK_BOARD' });
+    // }, 1500); // More frequent checks for better responsiveness
     
-    // Clean up the interval
-    return () => clearInterval(checkInterval);
+    // REMOVED: Clean up the interval
+    // return () => clearInterval(checkInterval);
   }, [board, currentPlayer, isCheck, send]);
   
   // Handlers for chess actions
@@ -275,64 +275,64 @@ export default function Home() {
     setValidMoves([...memoizedPossibleMoves]);
   }, [memoizedPossibleMoves]);
 
+  const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-900">
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-900">
       <div className="z-10 w-full max-w-2xl items-center justify-between font-mono text-sm flex flex-col gap-6">
         <h1 className="text-3xl font-bold text-white mb-2">Chess Game</h1>
         
-        {/* Chess Board Container */}
-        <div className="relative bg-gray-800 p-10 rounded-lg shadow-xl overflow-hidden">
-          {/* Player Info - Top (Black) */}
-          <div className="flex justify-between items-center w-full mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-black border-2 border-white shadow-sm"></div>
-              <span className="text-gray-100 font-medium">poluruc</span>
-              {currentPlayer === 'black' && (
-                <>
-                  {isCheckmate && winner === 'white' && (
-                    <span className="text-red-500 font-bold ml-2">CHECKMATE!</span>
-                  )}
-                  {isCheck && !isCheckmate && (
-                    <span className="text-red-500 font-bold ml-2">CHECK!</span>
-                  )}
-                </>
-              )}
-            </div>
-            {currentPlayer === 'black' && !gameOver && (
-              <div className="px-3 py-1 bg-blue-600 rounded-md text-white text-xs font-semibold shadow-md">
-                Current turn
-              </div>
+        {/* Player Info - Top (Black) */}
+        <div className="flex justify-between items-center w-full mb-1 px-2">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-black border-2 border-white shadow-sm"></div>
+            <span className="text-gray-100 font-medium">poluruc</span>
+            {currentPlayer === 'black' && (
+              <>
+                {isCheckmate && winner === 'white' && (
+                  <span className="text-red-500 font-bold ml-2">CHECKMATE!</span>
+                )}
+                {isCheck && !isCheckmate && (
+                  <span className="text-red-500 font-bold ml-2">CHECK!</span>
+                )}
+              </>
             )}
           </div>
-          
-          {/* Chess Board with border */}
-          <div className="border-[6px] border-amber-950 rounded-sm overflow-hidden shadow-xl">
-            {/* Chess Board */}
-            <div className="w-[480px] h-[480px] grid grid-cols-8 grid-rows-8 relative shadow-inner">
-              {/* Board coordinates - files (columns) */}
-              <div className="absolute -bottom-7 left-0 right-0 flex justify-around text-gray-300 text-sm font-semibold">
-                {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(file => (
-                  <span key={file} className="w-[60px] text-center">{file}</span>
-                ))}
-              </div>
-              
-              {/* Board coordinates - ranks (rows) */}
-              <div className="absolute -left-7 top-0 bottom-0 flex flex-col justify-around text-gray-300 text-sm font-semibold">
-                {['8', '7', '6', '5', '4', '3', '2', '1'].map(rank => (
-                  <span key={rank} className="h-[60px] flex items-center">{rank}</span>
-                ))}
-              </div>
-              
-              {/* Chess squares and pieces */}
-              {board.map((row, rowIndex) => (
+          {currentPlayer === 'black' && !gameOver && (
+            <div className="px-3 py-1 bg-blue-600 rounded-md text-white text-xs font-semibold shadow-md">
+              Current turn
+            </div>
+          )}
+        </div>
+        
+        {/* Main container for board and coordinates */}
+        <div className="flex flex-col items-center">
+          {/* Row for Ranks and Board */}
+          <div className="flex flex-row">
+            {/* Rank Coordinates (1-8) */}
+            <div className="flex flex-col justify-around items-center w-6 mr-1 text-sm font-bold text-gray-400 h-[320px] sm:h-[400px] md:h-[480px]">
+              {ranks.map((rank) => (
+                <div
+                  key={rank}
+                  className="h-[calc(100%/8)] flex items-center justify-center" // Adjusted height to be relative to new parent height
+                >
+                  {rank}
+                </div>
+              ))}
+            </div>
+
+            {/* Chessboard Grid */}
+            <div
+              className="grid grid-cols-8 grid-rows-8 w-[320px] h-[320px] sm:w-[400px] sm:h-[400px] md:w-[480px] md:h-[480px] rounded-sm shadow-xl"
+            >
+              {board.map((row, rowIndex) =>
                 row.map((cell, colIndex) => {
-                  // Determine cell color
-                  const isBlack = (rowIndex + colIndex) % 2 === 1;
-                  // Cell styling
-                  const cellClass = isBlack 
+                  const isBlackSquare = (rowIndex + colIndex) % 2 === 1;
+                  const cellClass = isBlackSquare 
                     ? 'bg-amber-800 hover:bg-amber-700' 
                     : 'bg-amber-100 hover:bg-amber-50';
-
+                  
                   return (
                     <div 
                       key={`${rowIndex}-${colIndex}`} 
@@ -340,11 +340,11 @@ export default function Home() {
                         ${cellClass} 
                         flex items-center justify-center 
                         cursor-pointer 
-                        w-[60px] h-[60px]
+                        w-full aspect-square // Changed from h-full to aspect-square
                         ${selectedPiece && selectedPiece.row === rowIndex && selectedPiece.col === colIndex ? 
                           'ring-4 ring-blue-500 ring-inset z-10' : ''}
                         ${validMoves.some(move => move.row === rowIndex && move.col === colIndex) ? 
-                          cell ? 'ring-4 ring-red-500 ring-inset' : 'after:content-[""] after:w-4 after:h-4 after:bg-green-500 after:rounded-full after:opacity-60' : ''}
+                          cell ? 'ring-4 ring-red-500 ring-inset' : 'after:content-[\\"\\"] after:w-4 after:h-4 after:bg-green-500 after:rounded-full after:opacity-60' : ''}
                         ${lastMove && ((lastMove.from.row === rowIndex && lastMove.from.col === colIndex) || 
                                        (lastMove.to.row === rowIndex && lastMove.to.col === colIndex)) ? 
                           'bg-yellow-500 bg-opacity-30' : ''}
@@ -354,9 +354,9 @@ export default function Home() {
                       {cell && (
                         <div 
                           className={`
-                            text-5xl font-bold 
+                            text-3xl sm:text-4xl md:text-5xl font-bold 
                             ${cell.charAt(0) === 'w' 
-                              ? isBlack 
+                              ? isBlackSquare 
                                 ? 'text-white drop-shadow-[0_0_2px_#000]' 
                                 : 'text-white drop-shadow-[0_0_3px_#000]' 
                               : 'text-gray-900'
@@ -375,61 +375,73 @@ export default function Home() {
                     </div>
                   );
                 })
-              ))}
-            </div>
-          </div>
-          
-          {/* Player Info - Bottom (White) */}
-          <div className="flex justify-between items-center w-full mt-3">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-white border-2 border-black shadow-sm"></div>
-              <span className="text-gray-100 font-medium">Player</span>
-              {currentPlayer === 'white' && (
-                <>
-                  {isCheckmate && winner === 'black' && (
-                    <span className="text-red-500 font-bold ml-2">CHECKMATE!</span>
-                  )}
-                  {isCheck && !isCheckmate && (
-                    <span className="text-red-500 font-bold ml-2">CHECK!</span>
-                  )}
-                </>
               )}
             </div>
-            {currentPlayer === 'white' && !gameOver && (
-              <div className="px-3 py-1 bg-blue-600 rounded-md text-white text-xs font-semibold shadow-md">
-                Current turn
+          </div>
+
+          {/* File Coordinates (a-h) */}
+          <div className="flex flex-row justify-around items-center h-6 mt-1 w-[320px] sm:w-[400px] md:w-[480px] text-sm font-bold text-gray-400">
+            {files.map((file) => (
+              <div
+                key={file}
+                className="w-[calc(100%/8)] flex items-center justify-center"
+              >
+                {file}
               </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Player Info - Bottom (White) */}
+        <div className="flex justify-between items-center w-full mt-1 px-2">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-white border-2 border-black shadow-sm"></div>
+            <span className="text-gray-100 font-medium">Player</span>
+            {currentPlayer === 'white' && (
+              <>
+                {isCheckmate && winner === 'black' && (
+                  <span className="text-red-500 font-bold ml-2">CHECKMATE!</span>
+                )}
+                {isCheck && !isCheckmate && (
+                  <span className="text-red-500 font-bold ml-2">CHECK!</span>
+                )}
+              </>
             )}
           </div>
-          
-          {/* Game Controls */}
-          <div className="mt-6 flex justify-center">
-            <button 
-              onClick={resetGame} 
-              className="px-5 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg"
-            >
-              Reset Game
-            </button>
-          </div>
-          
-          {/* Game Over Overlay */}
-          {gameOver && (
-            <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-20 rounded-lg">
-              <div className="text-3xl font-bold text-white mb-4">
-                {isCheckmate ? 
-                  `${winner === 'white' ? 'White' : 'Black'} wins by checkmate!` : 
-                  'Game drawn by stalemate!'
-                }
-              </div>
-              <button 
-                onClick={resetGame}
-                className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg text-lg"
-              >
-                Play Again
-              </button>
+          {currentPlayer === 'white' && !gameOver && (
+            <div className="px-3 py-1 bg-blue-600 rounded-md text-white text-xs font-semibold shadow-md">
+              Current turn
             </div>
           )}
         </div>
+        
+        {/* Game Controls */}
+        <div className="mt-6 flex justify-center">
+          <button 
+            onClick={resetGame} 
+            className="px-5 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg"
+          >
+            Reset Game
+          </button>
+        </div>
+        
+        {/* Game Over Overlay */}
+        {gameOver && (
+          <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-20 rounded-lg">
+            <div className="text-3xl font-bold text-white mb-4">
+              {isCheckmate ? 
+                `${winner === 'white' ? 'White' : 'Black'} wins by checkmate!` : 
+                'Game drawn by stalemate!'
+              }
+            </div>
+            <button 
+              onClick={resetGame}
+              className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg text-lg"
+            >
+              Play Again
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );

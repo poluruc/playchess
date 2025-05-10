@@ -54,201 +54,162 @@ const isValidMove = (
   toRow: number,
   toCol: number
 ): boolean => {
+  console.log(`[isValidMove ENTRY] Checking move for piece ${board[fromRow]?.[fromCol]} from [${fromRow},${fromCol}] to [${toRow},${toCol}]`);
   // Validate board coordinates
   if (fromRow < 0 || fromRow > 7 || fromCol < 0 || fromCol > 7 ||
       toRow < 0 || toRow > 7 || toCol < 0 || toCol > 7) {
-    console.error('Out of bounds coordinates in isValidMove:', { fromRow, fromCol, toRow, toCol });
+    console.error('[isValidMove EXIT] Out of bounds coordinates:', { fromRow, fromCol, toRow, toCol });
     return false;
   }
 
   const piece = board[fromRow][fromCol];
-  if (!piece) return false;
+  if (!piece) {
+    console.log("[isValidMove EXIT] No piece at source");
+    return false; 
+  }
   
-  // Basic validation: can't capture your own pieces
   const targetPiece = board[toRow][toCol];
   if (targetPiece && piece.charAt(0) === targetPiece.charAt(0)) {
+    console.log("[isValidMove EXIT] Cannot capture own piece");
     return false;
   }
   
-  // Prevent capturing the king - kings should never be capturable in chess
-  if (targetPiece && targetPiece.charAt(1) === 'K') {
-    return false;
-  }
+  // Temporarily commented out for isPositionUnderAttack, will be handled by game logic for actual moves.
+  // if (targetPiece && targetPiece.charAt(1) === 'K') {
+  //   console.log("[isValidMove EXIT] Cannot target king directly in this basic check");
+  //   return false; 
+  // }
   
   const pieceType = piece.charAt(1);
   const isWhite = piece.charAt(0) === 'w';
+  let result = false; // Declare result here
   
-  // Simple piece movement logic
   switch (pieceType) {
     case 'P': // Pawn
-      const direction = isWhite ? -1 : 1;
-      const startRow = isWhite ? 6 : 1;
-      
-      // Forward one square
+      const pieceColor = piece.charAt(0); // 'w' or 'b'
+      const direction = pieceColor === 'w' ? -1 : 1; // White moves up (row index decreases), Black moves down (row index increases)
+      const startRow = pieceColor === 'w' ? 6 : 1;
+      result = false; // Initialize result
+
+      // 1. Forward one square (must be empty)
       if (toCol === fromCol && toRow === fromRow + direction && !board[toRow][toCol]) {
-        return true;
+        result = true;
       }
-      
-      // Forward two squares from starting position
-      if (toCol === fromCol && fromRow === startRow && 
-          toRow === fromRow + 2 * direction && 
-          !board[fromRow + direction][fromCol] && 
-          !board[toRow][toCol]) {
-        return true;
+      // 2. Forward two squares from starting position (must be empty, and path clear)
+      else if (toCol === fromCol && fromRow === startRow &&
+               toRow === fromRow + 2 * direction &&
+               !board[fromRow + direction][fromCol] && // Intervening square empty
+               !board[toRow][toCol]) {                 // Target square empty
+        result = true;
       }
-      
-      // Capture diagonally
-      if (Math.abs(toCol - fromCol) === 1 && toRow === fromRow + direction) {
-        return !!board[toRow][toCol] && board[toRow][toCol].charAt(0) !== piece.charAt(0);
+      // 3. Capture diagonally (must be an opponent's piece on the target square)
+      else if (Math.abs(toCol - fromCol) === 1 && toRow === fromRow + direction &&
+               board[toRow][toCol] && board[toRow][toCol].charAt(0) !== pieceColor) {
+        result = true;
       }
-      
-      return false;
+      // NOTE: The previous condition that allowed diagonal moves to empty squares for attack checks
+      // has been removed. Pawn attack logic is now handled specifically in isPositionUnderAttack.
+
+      console.log(`[isValidMove EXIT - Pawn] For ${piece} from [${fromRow},${fromCol}] to [${toRow},${toCol}]. Result: ${result}`);
+      return result;
     
     case 'R': // Rook
-      // Must move horizontally or vertically
-      if (fromRow !== toRow && fromCol !== toCol) return false;
-      
-      // Check for pieces in between
-      if (fromRow === toRow) {
-        // Horizontal move
-        const start = Math.min(fromCol, toCol);
-        const end = Math.max(fromCol, toCol);
-        
-        for (let col = start + 1; col < end; col++) {
-          if (board[fromRow][col]) return false;
-        }
+      if (fromRow !== toRow && fromCol !== toCol) {
+        result = false;
       } else {
-        // Vertical move
-        const start = Math.min(fromRow, toRow);
-        const end = Math.max(fromRow, toRow);
-        
-        for (let row = start + 1; row < end; row++) {
-          if (board[row][fromCol]) return false;
-        }
-      }
-      
-      return true;
-    
-    case 'N': // Knight
-      // Knight moves in an L shape: 2 squares in one direction, 1 square perpendicular
-      const rowDiff = Math.abs(toRow - fromRow);
-      const colDiff = Math.abs(toCol - fromCol);
-      
-      return (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
-    
-    case 'B': // Bishop
-      // Must move diagonally - this is the strict diagonal move check
-      if (Math.abs(toRow - fromRow) !== Math.abs(toCol - fromCol)) {
-        return false;
-      }
-      
-      // Validate that target position is reachable in a diagonal
-      const bishopRowStep = toRow > fromRow ? 1 : -1;
-      const bishopColStep = toCol > fromCol ? 1 : -1;
-      
-      let bishopRow = fromRow + bishopRowStep;
-      let bishopCol = fromCol + bishopColStep;
-      
-      // Trace the diagonal path square by square
-      // Fixed diagonal movement check - simpler and more reliable approach
-      while (bishopRow !== toRow || bishopCol !== toCol) {
-        if (bishopRow < 0 || bishopRow > 7 || bishopCol < 0 || bishopCol > 7) {
-          // If we go out of bounds, the move isn't valid
-          console.error('Bishop path calculation went out of bounds', { 
-            from: [fromRow, fromCol], 
-            to: [toRow, toCol],
-            current: [bishopRow, bishopCol]
-          });
-          return false;
-        }
-        
-        // If we find a piece in the path, the move is blocked
-        if (board[bishopRow][bishopCol]) {
-          return false;
-        }
-        
-        // Move to the next square in the diagonal
-        bishopRow += bishopRowStep;
-        bishopCol += bishopColStep;
-      }
-      
-      // Now we're at the target square - it should be either empty or contain an opponent's piece
-      return !board[toRow][toCol] || board[toRow][toCol].charAt(0) !== piece.charAt(0);
-    
-    case 'Q': // Queen (combines rook and bishop movements)
-      // Check if the move is like a rook or a bishop
-      const isRookLike = fromRow === toRow || fromCol === toCol;
-      const isBishopLike = Math.abs(toRow - fromRow) === Math.abs(toCol - fromCol);
-      
-      if (!isRookLike && !isBishopLike) {
-        return false;
-      }
-      
-      // If it's a rook-like move
-      if (isRookLike) {
+        let pathClear = true;
         if (fromRow === toRow) {
-          // Horizontal move
           const start = Math.min(fromCol, toCol);
           const end = Math.max(fromCol, toCol);
-          
           for (let col = start + 1; col < end; col++) {
-            if (board[fromRow][col]) return false;
+            if (board[fromRow][col]) { pathClear = false; break; }
           }
         } else {
-          // Vertical move
           const start = Math.min(fromRow, toRow);
           const end = Math.max(fromRow, toRow);
-          
           for (let row = start + 1; row < end; row++) {
-            if (board[row][fromCol]) return false;
+            if (board[row][fromCol]) { pathClear = false; break; }
           }
         }
-        return true;
-      } 
-      // If it's a bishop-like move
-      else {
-        // Diagonal movement - use the same logic as bishop
-        const queenRowStep = toRow > fromRow ? 1 : -1;
-        const queenColStep = toCol > fromCol ? 1 : -1;
-        
-        let queenRow = fromRow + queenRowStep;
-        let queenCol = fromCol + queenColStep;
-        
-        // Trace the diagonal path square by square
-        // Fixed diagonal movement check - simpler and more reliable approach
-        while (queenRow !== toRow || queenCol !== toCol) {
-          if (queenRow < 0 || queenRow > 7 || queenCol < 0 || queenCol > 7) {
-            // If we go out of bounds, the move isn't valid
-            console.error('Queen diagonal path calculation went out of bounds', { 
-              from: [fromRow, fromCol], 
-              to: [toRow, toCol],
-              current: [queenRow, queenCol]
-            });
-            return false;
-          }
-          
-          // If we find a piece in the path, the move is blocked
-          if (board[queenRow][queenCol]) {
-            return false;
-          }
-          
-          // Move to the next square in the diagonal
-          queenRow += queenRowStep;
-          queenCol += queenColStep;
-        }
-        
-        // Now we're at the target square - it should be either empty or contain an opponent's piece
-        return !board[toRow][toCol] || board[toRow][toCol].charAt(0) !== piece.charAt(0);
+        result = pathClear;
       }
+      console.log(`[isValidMove EXIT - Rook] Result: ${result}`);
+      return result;
+    
+    case 'N': // Knight
+      const rowDiff = Math.abs(toRow - fromRow);
+      const colDiff = Math.abs(toCol - fromCol);
+      result = (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
+      console.log(`[isValidMove EXIT - Knight] Result: ${result}`);
+      return result;
+    
+    case 'B': // Bishop
+      if (Math.abs(toRow - fromRow) !== Math.abs(toCol - fromCol)) {
+        result = false;
+      } else {
+        let pathClear = true;
+        const bishopRowStep = toRow > fromRow ? 1 : -1;
+        const bishopColStep = toCol > fromCol ? 1 : -1;
+        let bishopRow = fromRow + bishopRowStep;
+        let bishopCol = fromCol + bishopColStep;
+        while (bishopRow !== toRow || bishopCol !== toCol) {
+          if (bishopRow < 0 || bishopRow > 7 || bishopCol < 0 || bishopCol > 7) { pathClear = false; break;}
+          if (board[bishopRow][bishopCol]) { pathClear = false; break; }
+          bishopRow += bishopRowStep;
+          bishopCol += bishopColStep;
+        }
+        result = pathClear;
+      }
+      console.log(`[isValidMove EXIT - Bishop] Result: ${result}`);
+      return result;
+    
+    case 'Q': // Queen
+      const isRookLike = fromRow === toRow || fromCol === toCol;
+      const isBishopLike = Math.abs(toRow - fromRow) === Math.abs(toCol - fromCol);
+      if (!isRookLike && !isBishopLike) {
+        result = false;
+      } else {
+        let pathClear = true;
+        if (isRookLike) {
+          if (fromRow === toRow) {
+            const start = Math.min(fromCol, toCol);
+            const end = Math.max(fromCol, toCol);
+            for (let col = start + 1; col < end; col++) {
+              if (board[fromRow][col]) { pathClear = false; break; }
+            }
+          } else {
+            const start = Math.min(fromRow, toRow);
+            const end = Math.max(fromRow, toRow);
+            for (let row = start + 1; row < end; row++) {
+              if (board[row][fromCol]) { pathClear = false; break; }
+            }
+          }
+        } else { // Bishop-like
+          const queenRowStep = toRow > fromRow ? 1 : -1;
+          const queenColStep = toCol > fromCol ? 1 : -1;
+          let queenRow = fromRow + queenRowStep;
+          let queenCol = fromCol + queenColStep;
+          while (queenRow !== toRow || queenCol !== toCol) {
+            if (queenRow < 0 || queenRow > 7 || queenCol < 0 || queenCol > 7) { pathClear = false; break; }
+            if (board[queenRow][queenCol]) { pathClear = false; break; }
+            queenRow += queenRowStep;
+            queenCol += queenColStep;
+          }
+        }
+        result = pathClear;
+      }
+      console.log(`[isValidMove EXIT - Queen (${isRookLike ? 'Rook-like' : 'Bishop-like'})] Result: ${result}`);
+      return result;
     
     case 'K': // King
-      // King moves one square in any direction
       const kingRowDiff = Math.abs(toRow - fromRow);
       const kingColDiff = Math.abs(toCol - fromCol);
-      
-      return kingRowDiff <= 1 && kingColDiff <= 1 && !(kingRowDiff === 0 && kingColDiff === 0);
+      result = kingRowDiff <= 1 && kingColDiff <= 1 && !(kingRowDiff === 0 && kingColDiff === 0);
+      console.log(`[isValidMove EXIT - King] Result: ${result}`);
+      return result;
     
     default:
+      console.log("[isValidMove EXIT] Unknown piece type");
       return false;
   }
 };
@@ -295,44 +256,64 @@ export const findKingPosition = (board: string[][], player: 'white' | 'black'): 
 
 // Check if a position is under attack by the opponent
 const isPositionUnderAttack = (board: string[][], position: Position, byPlayer: 'white' | 'black'): boolean => {
+  console.log(`[isPositionUnderAttack ENTRY] Checking if position [${position.row},${position.col}] is attacked by ${byPlayer}`);
+  console.log('[isPositionUnderAttack received board state]:');
+  for (let r = 0; r < 8; r++) {
+    let rowStr = '';
+    for (let c = 0; c < 8; c++) {
+      rowStr += (board[r][c] || '..') + ' ';
+    }
+    console.log(rowStr.trim());
+  }
+
   // Validate input position
   if (!position || position.row < 0 || position.row > 7 || position.col < 0 || position.col > 7) {
     console.error('Invalid position in isPositionUnderAttack:', position);
-    return false;
+    return false; // Or handle error appropriately
   }
 
   const piecePrefix = byPlayer === 'white' ? 'w' : 'b';
   
-  for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 8; col++) {
-      const piece = board[row][col];
+  for (let r_attacker = 0; r_attacker < 8; r_attacker++) {
+    for (let c_attacker = 0; c_attacker < 8; c_attacker++) {
+      const piece = board[r_attacker][c_attacker];
+      // Check if it's an opponent's piece
       if (piece && piece.charAt(0) === piecePrefix) {
-        try {
-          // Special case for pawns (they capture differently from how they move)
-          if (piece.charAt(1) === 'P') {
-            const direction = piecePrefix === 'w' ? -1 : 1;
-            
-            // Check if the pawn is in a position to attack the target position
-            // For white pawns, they attack one row up diagonally
-            // For black pawns, they attack one row down diagonally
-            if (row + direction === position.row && 
-                (col === position.col - 1 || col === position.col + 1)) {
-              console.log(`Position [${position.row},${position.col}] is under attack by ${piecePrefix === 'w' ? 'white' : 'black'} pawn at [${row},${col}]`);
-              return true;
-            }
-          } 
-          // For all other pieces, use the standard isValidMove check
-          else if (isValidMove(board, row, col, position.row, position.col)) {
-            console.log(`Position [${position.row},${position.col}] is under attack by ${piece} at [${row},${col}]`);
-            return true;
+        console.log(`[isPositionUnderAttack] Considering ${byPlayer} piece ${piece} at [${r_attacker},${c_attacker}] to attack [${position.row},${position.col}]`);
+        
+        let canAttack = false;
+        const pieceType = piece.charAt(1);
+
+        if (pieceType === 'P') { // Pawn-specific attack logic
+          const pawnColor = piece.charAt(0);
+          const direction = pawnColor === 'w' ? -1 : 1; // White moves up (row index decreases), Black moves down
+
+          // Pawns attack diagonally forward one square
+          if (position.row === r_attacker + direction && 
+              (position.col === c_attacker - 1 || position.col === c_attacker + 1)) {
+            canAttack = true;
+            console.log(`[isPositionUnderAttack] Pawn ${piece} at [${r_attacker},${c_attacker}] CAN attack [${position.row},${position.col}]`);
+          } else {
+            console.log(`[isPositionUnderAttack] Pawn ${piece} at [${r_attacker},${c_attacker}] cannot attack [${position.row},${position.col}] based on pawn attack rules`);
           }
-        } catch (error) {
-          console.error(`Error checking if position [${position.row},${position.col}] is under attack by ${piece} at [${row},${col}]:`, error);
+        } else { // For all other pieces, use isValidMove
+          // Special log for Queens to ensure they are being checked
+          if (piece.toUpperCase().endsWith('Q')) {
+              console.log(`[isPositionUnderAttack] --- Queen ${piece} at [${r_attacker},${c_attacker}] checking attack on [${position.row},${position.col}] via isValidMove ---`);
+          }
+          canAttack = isValidMove(board, r_attacker, c_attacker, position.row, position.col);
+          console.log(`[isPositionUnderAttack] Result of isValidMove for ${piece} from [${r_attacker},${c_attacker}] to [${position.row},${position.col}]: ${canAttack}`);
+        }
+        
+        if (canAttack) {
+          console.log(`[isPositionUnderAttack EXIT] Position [${position.row},${position.col}] IS under attack by ${piece} at [${r_attacker},${c_attacker}]`);
+          return true;
         }
       }
     }
   }
   
+  console.log(`[isPositionUnderAttack EXIT] Position [${position.row},${position.col}] is NOT under attack by ${byPlayer}`);
   return false;
 };
 
@@ -398,6 +379,17 @@ export const wouldMoveResultInCheck = (
   toCol: number, 
   player: 'white' | 'black'
 ): boolean => {
+  const pieceBeingMoved = board[fromRow]?.[fromCol];
+  console.log('[wouldMoveResultInCheck ENTRY]', { fromRow, fromCol, toRow, toCol, player, piece: pieceBeingMoved });
+  console.log('[wouldMoveResultInCheck received board]:');
+  for (let r = 0; r < 8; r++) {
+    let rowStr = '';
+    for (let c = 0; c < 8; c++) {
+      rowStr += (board[r][c] || '..') + ' ';
+    }
+    console.log(rowStr);
+  }
+
   // Validate boundaries
   if (fromRow < 0 || fromRow > 7 || fromCol < 0 || fromCol > 7 ||
       toRow < 0 || toRow > 7 || toCol < 0 || toCol > 7) {
@@ -457,6 +449,8 @@ export const wouldMoveResultInCheck = (
   // Check if the opponent can attack the king's position after the move
   const opponent = player === 'white' ? 'black' : 'white';
   const kingInCheck = isPositionUnderAttack(newBoard, kingPosition, opponent);
+  
+  console.log('[wouldMoveResultInCheck EXIT]', { fromRow, fromCol, toRow, toCol, player, piece: pieceBeingMoved, kingPositionAfterMove: kingPosition, opponent, kingInCheck });
   
   if (kingInCheck) {
     console.log(`Move from [${fromRow},${fromCol}] to [${toRow},${toCol}] would leave ${player}'s king at [${kingPosition.row},${kingPosition.col}] in check`);
