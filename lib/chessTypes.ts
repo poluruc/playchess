@@ -4,6 +4,11 @@ export interface Position {
   col: number;
 }
 
+export interface CastlingRights {
+  kingSide: boolean;
+  queenSide: boolean;
+}
+
 export interface ChessContext {
   board: string[][];
   currentPlayer: 'white' | 'black';
@@ -15,6 +20,10 @@ export interface ChessContext {
   isStalemate: boolean;
   gameOver: boolean;
   winner: 'white' | 'black' | null;
+  castlingRights: { // Added for castling
+    white: CastlingRights;
+    black: CastlingRights;
+  };
 }
 
 // Events in XState v5 format
