@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { initialBoard } from '../lib/chessMachine';
 import { useChessMachine } from '../lib/useChessMachine';
 
@@ -47,160 +47,12 @@ export default function Home() {
     }
   };
   
-  const handleResetGame = () => {
+    const handleResetGame = () => {
     send({ type: 'RESET_GAME' as const });
   };
   
-  // Function to calculate valid moves for a piece (simplified version)
-  const getValidMoves = (board: string[][], row: number, col: number): {row: number, col: number}[] => {
-    const piece = board[row][col];
-    if (!piece) return [];
-    
-    const pieceType = piece.charAt(1);
-    const isWhite = piece.charAt(0) === 'w';
-    const moves: {row: number, col: number}[] = [];
-    
-    // Simple movement patterns (not respecting all chess rules yet)
-    switch (pieceType) {
-      case 'P': // Pawn
-        const direction = isWhite ? -1 : 1; // White pawns move up, black pawns move down
-        const startRow = isWhite ? 6 : 1;
-        
-        // Forward one square
-        if (row + direction >= 0 && row + direction < 8 && !board[row + direction][col]) {
-          moves.push({row: row + direction, col});
-          
-          // Forward two squares from starting position
-          if (row === startRow && !board[row + 2 * direction][col]) {
-            moves.push({row: row + 2 * direction, col});
-          }
-        }
-        
-        // Capture diagonally
-        for (const colOffset of [-1, 1]) {
-          const newCol = col + colOffset;
-          if (
-            newCol >= 0 && newCol < 8 && 
-            row + direction >= 0 && row + direction < 8 && 
-            board[row + direction][newCol] && 
-            board[row + direction][newCol].charAt(0) !== piece.charAt(0)
-          ) {
-            moves.push({row: row + direction, col: newCol});
-          }
-        }
-        break;
-        
-      case 'R': // Rook
-        // Horizontal and vertical movement
-        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-        for (const [rowDir, colDir] of directions) {
-          let newRow = row + rowDir;
-          let newCol = col + colDir;
-          
-          while (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
-            if (!board[newRow][newCol]) {
-              moves.push({row: newRow, col: newCol});
-            } else {
-              if (board[newRow][newCol].charAt(0) !== piece.charAt(0)) {
-                moves.push({row: newRow, col: newCol});
-              }
-              break;
-            }
-            newRow += rowDir;
-            newCol += colDir;
-          }
-        }
-        break;
-        
-      case 'N': // Knight
-        const knightMoves = [
-          [-2, -1], [-2, 1], [-1, -2], [-1, 2],
-          [1, -2], [1, 2], [2, -1], [2, 1]
-        ];
-        
-        for (const [rowOffset, colOffset] of knightMoves) {
-          const newRow = row + rowOffset;
-          const newCol = col + colOffset;
-          
-          if (
-            newRow >= 0 && newRow < 8 && 
-            newCol >= 0 && newCol < 8 && 
-            (!board[newRow][newCol] || board[newRow][newCol].charAt(0) !== piece.charAt(0))
-          ) {
-            moves.push({row: newRow, col: newCol});
-          }
-        }
-        break;
-        
-      case 'B': // Bishop
-        const bishopDirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
-        for (const [rowDir, colDir] of bishopDirs) {
-          let newRow = row + rowDir;
-          let newCol = col + colDir;
-          
-          while (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
-            if (!board[newRow][newCol]) {
-              moves.push({row: newRow, col: newCol});
-            } else {
-              if (board[newRow][newCol].charAt(0) !== piece.charAt(0)) {
-                moves.push({row: newRow, col: newCol});
-              }
-              break;
-            }
-            newRow += rowDir;
-            newCol += colDir;
-          }
-        }
-        break;
-        
-      case 'Q': // Queen (combines rook and bishop movements)
-        const queenDirs = [
-          [-1, -1], [-1, 0], [-1, 1], [0, -1],
-          [0, 1], [1, -1], [1, 0], [1, 1]
-        ];
-        
-        for (const [rowDir, colDir] of queenDirs) {
-          let newRow = row + rowDir;
-          let newCol = col + colDir;
-          
-          while (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
-            if (!board[newRow][newCol]) {
-              moves.push({row: newRow, col: newCol});
-            } else {
-              if (board[newRow][newCol].charAt(0) !== piece.charAt(0)) {
-                moves.push({row: newRow, col: newCol});
-              }
-              break;
-            }
-            newRow += rowDir;
-            newCol += colDir;
-          }
-        }
-        break;
-        
-      case 'K': // King
-        const kingMoves = [
-          [-1, -1], [-1, 0], [-1, 1], [0, -1],
-          [0, 1], [1, -1], [1, 0], [1, 1]
-        ];
-        
-        for (const [rowOffset, colOffset] of kingMoves) {
-          const newRow = row + rowOffset;
-          const newCol = col + colOffset;
-          
-          if (
-            newRow >= 0 && newRow < 8 && 
-            newCol >= 0 && newCol < 8 && 
-            (!board[newRow][newCol] || board[newRow][newCol].charAt(0) !== piece.charAt(0))
-          ) {
-            moves.push({row: newRow, col: newCol});
-          }
-        }
-        break;
-    }
-    
-    return moves;
-  };
+  // We no longer need this function as moves are calculated by the state machine
+  // Keeping a comment here for reference
 
   // Using state from the XState machine instead of local state
   // The board and currentPlayer are now managed by the state machine
@@ -236,31 +88,38 @@ export default function Home() {
     
     // If there's a selected piece and we're clicking on a different cell
     if (selectedPiece) {
-      // Pass the click to the state machine to handle selection/deselection
-      console.log('Selected piece exists, sending position to state machine:', position);
-      handlePieceClick(rowNum, colNum);
-
-      // Calculate valid moves for UI highlights
-      if (board[rowNum][colNum] && 
-          ((board[rowNum][colNum].charAt(0) === 'w' && currentPlayer === 'white') || 
-           (board[rowNum][colNum].charAt(0) === 'b' && currentPlayer === 'black'))){
-        const newValidMoves = getValidMoves(board, rowNum, colNum);
-        setValidMoves(newValidMoves);
-      } else {
-        setValidMoves([]);
-      }
-
-      // Update last move if applicable
-      // In a full implementation, we would get this from the state machine
-      // For now, just track it locally
-      if (selectedPiece && selectedPiece.row !== rowNum && selectedPiece.col !== colNum) {
+      // Check if we're clicking on a possible move target
+      const isMovingTo = possibleMoves.some(move => move.row === rowNum && move.col === colNum);
+      
+      if (isMovingTo) {
+        // If clicking on a valid move target, send MOVE_PIECE event
+        console.log('Moving piece to:', position);
+        handleMovePiece(rowNum, colNum);
+        
+        // Update last move for highlighting
         setLastMove({
           from: {row: selectedPiece.row, col: selectedPiece.col},
           to: {row: rowNum, col: colNum}
         });
+        
+        // Clear valid moves display since the move is now complete
+        setValidMoves([]);
+      } else if (board[rowNum][colNum] && 
+                ((board[rowNum][colNum].charAt(0) === 'w' && currentPlayer === 'white') || 
+                 (board[rowNum][colNum].charAt(0) === 'b' && currentPlayer === 'black'))) {
+        // If clicking on another of our pieces, select that piece instead
+        console.log('Selecting different piece:', position);
+        handlePieceClick(rowNum, colNum);
+        
+        // The valid moves will be calculated by the state machine and available in possibleMoves
+      setValidMoves([...possibleMoves]);
+      } else {
+        // If clicking elsewhere, just try selecting/deselecting
+        console.log('Deselecting current piece');
+        handlePieceClick(rowNum, colNum);
+        setValidMoves([]);
       }
-    }
-    // If no piece is selected yet, select one if it belongs to the current player
+    }      // If no piece is selected yet, select one if it belongs to the current player
     else if (clickedPiece && 
         ((clickedPiece.charAt(0) === 'w' && currentPlayer === 'white') || 
          (clickedPiece.charAt(0) === 'b' && currentPlayer === 'black'))) {
@@ -268,9 +127,8 @@ export default function Home() {
       // Use the state machine's handler
       handlePieceClick(rowNum, colNum);
       
-      // Calculate valid moves for UI purposes
-      const newValidMoves = getValidMoves(board, rowNum, colNum);
-      setValidMoves(newValidMoves);
+      // The valid moves will come from the state machine's context
+      setValidMoves([...possibleMoves]);
     }
   };
 
@@ -299,6 +157,48 @@ export default function Home() {
       default: return piece;
     }
   };
+
+  // New function to handle moving pieces
+  const handleMovePiece = (row: number, col: number) => {
+    // Convert to numbers and verify they are valid
+    const rowNum = Number(row);
+    const colNum = Number(col);
+    
+    if (isNaN(rowNum) || isNaN(colNum)) {
+      console.error('Invalid position values in handleMovePiece:', { row, col });
+      return;
+    }
+    
+    // Debug the values being sent
+    console.log('Sending MOVE_PIECE event with position:', { row: rowNum, col: colNum });
+    
+    // Create a properly typed event with XState v5 syntax
+    const movePieceEvent = {
+      type: 'MOVE_PIECE' as const,
+      position: { 
+        row: rowNum, 
+        col: colNum 
+      }
+    };
+    
+    // Debug the full event
+    console.log('Full event object:', movePieceEvent);
+    
+    try {
+      // Send the event using v5 style
+      send(movePieceEvent);
+    } catch (error) {
+      console.error('Error sending MOVE_PIECE event:', error);
+    }
+  };
+
+  // Use an effect to update valid moves whenever possibleMoves changes in the state machine
+  // Using useMemo to wrap the possibleMoves value to avoid unnecessary re-renders
+  const memoizedPossibleMoves = useMemo(() => possibleMoves || [], [possibleMoves]);
+  
+  useEffect(() => {
+    setValidMoves([...memoizedPossibleMoves]);
+  }, [memoizedPossibleMoves]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-900">

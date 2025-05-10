@@ -10,12 +10,10 @@ export function useChessMachine() {
   // Start the actor when the component mounts
   useEffect(() => {
     // Log when the actor is started
-    console.log('Chess actor initialized:', chessService.id);
-    
-    // Make actor available in dev tools for debugging
-    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-      (window as any).__chessActor = chessService;
-    }
+    console.log('Chess actor initialized:', chessService.id);      // Make actor available in dev tools for debugging
+      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+        (window as Window & typeof globalThis & { __chessActor: typeof chessService }).__chessActor = chessService;
+      }
     
     // Clean up on unmount - optional as actors can persist
     return () => {

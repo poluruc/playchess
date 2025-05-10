@@ -1,19 +1,14 @@
 'use client';
-import { useActor } from '@xstate/react';
-import { useEffect } from 'react';
+import { useSelector } from '@xstate/react';
 import chessService from '../lib/chessService';
 
 export default function Home() {
-  // Start the service when the component mounts
-  useEffect(() => {
-    chessService.start();
-    
-    // Stop the service when the component unmounts
-    return () => chessService.stop();
-  }, []);
+  // No need for useEffect to start/stop the service 
+  // since it's already started in chessService.ts
   
-  // Get the current state and send function from the service
-  const [state, send] = useActor(chessService);
+  // Use useSelector instead of useActor for an ActorRef in XState v5
+  const state = useSelector(chessService, state => state);
+  const send = chessService.send;
   
   // Destructure the context from state
   const { board, currentPlayer, selectedPiece, possibleMoves } = state.context;
@@ -32,30 +27,65 @@ export default function Home() {
   
   // Handler for resetting the game
   const handleResetGame = () => {
-    send({ type: 'RESET_GAME' });
+    send({ type: 'RESET_GAME' as const });
   };
   
-  // Function to calculate valid moves for a piece (simplified version)
-  const getValidMoves = (board: string[][], row: number, col: number): {row: number, col: number}[] => {
-    const piece = board[row][col];
-    if (!piece) return [];
-    
-    const pieceType = piece.charAt(1);
-    const isWhite = piece.charAt(0) === 'w';
-    // Rest of the existing getValidMoves function
-    // ... (keep the existing logic)
-    
-    return []; // Replace this with your existing logic
-  };
-  
-  // Rest of your component code
-  // ... (keep the existing render logic but use the state from XState)
-  
+  // Display the game based on state machine context...
   return (
-    <div>
-      <h1>Chess Game</h1>
-      {/* Render your chess board using the state from XState */}
-      {/* Update your existing rendering to use the state machine context */}
+    <div className="p-4">
+      <h2 className="text-lg font-bold">Chess Game using XState v5</h2>
+      <p>Current player: {currentPlayer}</p>
+      
+      <div className="grid grid-cols-8 gap-1 my-4">
+        {board.map((row, rowIndex) => 
+          row.map((cell, colIndex) => (
+            <div 
+              key={`${rowIndex}-${colIndex}`}
+              className={`
+                w-12 h-12 flex items-center justify-center
+                ${(rowIndex + colIndex) % 2 === 0 ? 'bg-amber-100' : 'bg-amber-800'}
+                ${selectedPiece?.row === rowIndex && selectedPiece?.col === colIndex ? 
+                  'ring-2 ring-blue-500' : ''}
+                ${possibleMoves.some(move => move.row === rowIndex && move.col === colIndex) ?
+                  'ring-2 ring-green-500' : ''}
+                cursor-pointer
+              `}
+              onClick={() => {
+                if (selectedPiece && possibleMoves.some(move => 
+                  move.row === rowIndex && move.col === colIndex)) {
+                  handleMovePiece(rowIndex, colIndex);
+                } else {
+                  handleSelectPiece(rowIndex, colIndex);
+                }
+              }}
+            >
+              {cell && (
+                <span className={`text-xl ${cell.startsWith('w') ? 'text-white' : 'text-black'}`}>
+                  {(() => {
+                    const pieceType = cell.charAt(1);
+                    switch (pieceType) {
+                      case 'K': return cell.startsWith('w') ? '♔' : '♚';
+                      case 'Q': return cell.startsWith('w') ? '♕' : '♛';
+                      case 'R': return cell.startsWith('w') ? '♖' : '♜';
+                      case 'B': return cell.startsWith('w') ? '♗' : '♝';
+                      case 'N': return cell.startsWith('w') ? '♘' : '♞';
+                      case 'P': return cell.startsWith('w') ? '♙' : '♟';
+                      default: return cell;
+                    }
+                  })()}
+                </span>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      
+      <button 
+        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded" 
+        onClick={handleResetGame}
+      >
+        Reset Game
+      </button>
     </div>
   );
 }
