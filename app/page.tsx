@@ -14,15 +14,73 @@ export default function Home() {
   const selectedPiece = state.context?.selectedPiece || null;
   const possibleMoves = state.context?.possibleMoves || [];
   const error = state.context?.error;
+  const isCheck = state.context?.isCheck || false;
+  const isCheckmate = state.context?.isCheckmate || false;
+  const isStalemate = state.context?.isStalemate || false;
+  const gameOver = state.context?.gameOver || false;
+  const winner = state.context?.winner || null;
 
   // Show toast when error changes
   useEffect(() => {
-  if (error) {
-    toast.error(error, {
-      duration: 3000,
+    if (error) {
+      toast.error(error, {
+        duration: 3000,
+      });
+    }
+  }, [error]);
+  
+  // Enhanced check detection when board changes
+  useEffect(() => {
+    // Import the check detection and necessary helper functions
+    import('../lib/chessMachine').then(({ isKingInCheck, findKingPosition, wouldMoveResultInCheck }) => {
+      // First check if the current player is in check
+      const isCurrentlyInCheck = isKingInCheck(board, currentPlayer);
+      
+      // If there's a mismatch between actual check status and state
+      if (isCurrentlyInCheck !== isCheck) {
+        console.log(`Check status mismatch - Actual: ${isCurrentlyInCheck}, State: ${isCheck}`);
+        
+        // Get king position for better logging
+        const kingPos = findKingPosition(board, currentPlayer);
+        if (kingPos) {
+          console.log(`${currentPlayer}'s king position: [${kingPos.row},${kingPos.col}]`);
+          
+          // Additional diagnostic for pieces attacking the king
+          if (isCurrentlyInCheck) {
+            console.log(`Looking for pieces attacking ${currentPlayer}'s king at [${kingPos.row},${kingPos.col}]`);
+          }
+        }
+        
+        // Update the state machine to reflect the actual check status
+        send({ type: 'CHECK_BOARD' });
+        
+        // Show a notification to the user about the check
+        if (isCurrentlyInCheck) {
+          toast.error(`${currentPlayer === 'white' ? 'White' : 'Black'} is in check!`, {
+            duration: 3000,
+          });
+        }
+      }
+      
+      // Check the opponent as well, since they might be in check after the move
+      const opponent = currentPlayer === 'white' ? 'black' : 'white';
+      const isOpponentInCheck = isKingInCheck(board, opponent);
+      
+      if (isOpponentInCheck) {
+        console.log(`Opponent (${opponent}) is in check!`);
+      }
     });
-  }
-}, [error]);
+    
+    // Set interval to periodically re-check for check conditions (helps catch edge cases)
+    // The interval is actually important as it catches issues that might be missed during normal flow
+    const checkInterval = setInterval(() => {
+      // Re-check the board state periodically
+      send({ type: 'CHECK_BOARD' });
+    }, 1500); // More frequent checks for better responsiveness
+    
+    // Clean up the interval
+    return () => clearInterval(checkInterval);
+  }, [board, currentPlayer, isCheck, send]);
   
   // Handlers for chess actions
   const handlePieceClick = (row: number, col: number) => {
@@ -74,6 +132,11 @@ export default function Home() {
 
   // Handle cell click - using the state machine
   const handleCellClick = (row: number, col: number) => {
+    // Prevent interactions when the game is over
+    if (gameOver) {
+      return;
+    }
+    
     // Ensure row and col are numbers (not strings)
     const rowNum = Number(row);
     const colNum = Number(col);
@@ -218,14 +281,24 @@ export default function Home() {
         <h1 className="text-3xl font-bold text-white mb-2">Chess Game</h1>
         
         {/* Chess Board Container */}
-        <div className="relative bg-gray-800 p-10 rounded-lg shadow-xl">
+        <div className="relative bg-gray-800 p-10 rounded-lg shadow-xl overflow-hidden">
           {/* Player Info - Top (Black) */}
           <div className="flex justify-between items-center w-full mb-3">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-black border-2 border-white shadow-sm"></div>
               <span className="text-gray-100 font-medium">poluruc</span>
+              {currentPlayer === 'black' && (
+                <>
+                  {isCheckmate && winner === 'white' && (
+                    <span className="text-red-500 font-bold ml-2">CHECKMATE!</span>
+                  )}
+                  {isCheck && !isCheckmate && (
+                    <span className="text-red-500 font-bold ml-2">CHECK!</span>
+                  )}
+                </>
+              )}
             </div>
-            {currentPlayer === 'black' && (
+            {currentPlayer === 'black' && !gameOver && (
               <div className="px-3 py-1 bg-blue-600 rounded-md text-white text-xs font-semibold shadow-md">
                 Current turn
               </div>
@@ -309,10 +382,20 @@ export default function Home() {
           {/* Player Info - Bottom (White) */}
           <div className="flex justify-between items-center w-full mt-3">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-white border-2 border-gray-400 shadow-sm"></div>
-              <span className="text-gray-100 font-medium">VCisneiros</span>
+              <div className="w-4 h-4 rounded-full bg-white border-2 border-black shadow-sm"></div>
+              <span className="text-gray-100 font-medium">Player</span>
+              {currentPlayer === 'white' && (
+                <>
+                  {isCheckmate && winner === 'black' && (
+                    <span className="text-red-500 font-bold ml-2">CHECKMATE!</span>
+                  )}
+                  {isCheck && !isCheckmate && (
+                    <span className="text-red-500 font-bold ml-2">CHECK!</span>
+                  )}
+                </>
+              )}
             </div>
-            {currentPlayer === 'white' && (
+            {currentPlayer === 'white' && !gameOver && (
               <div className="px-3 py-1 bg-blue-600 rounded-md text-white text-xs font-semibold shadow-md">
                 Current turn
               </div>
@@ -328,6 +411,24 @@ export default function Home() {
               Reset Game
             </button>
           </div>
+          
+          {/* Game Over Overlay */}
+          {gameOver && (
+            <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-20 rounded-lg">
+              <div className="text-3xl font-bold text-white mb-4">
+                {isCheckmate ? 
+                  `${winner === 'white' ? 'White' : 'Black'} wins by checkmate!` : 
+                  'Game drawn by stalemate!'
+                }
+              </div>
+              <button 
+                onClick={resetGame}
+                className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg text-lg"
+              >
+                Play Again
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </main>

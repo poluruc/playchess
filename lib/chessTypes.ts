@@ -9,14 +9,21 @@ export interface ChessContext {
   currentPlayer: 'white' | 'black';
   selectedPiece: Position | null;
   possibleMoves: Position[];
-  error: string | null; // Add this line
+  error: string | null;
+  isCheck: boolean;
+  isCheckmate: boolean;
+  isStalemate: boolean;
+  gameOver: boolean;
+  winner: 'white' | 'black' | null;
 }
 
 // Events in XState v5 format
 export type ChessEvents = 
   | { type: 'SELECT_PIECE'; position: Position }
   | { type: 'MOVE_PIECE'; position: Position }
-  | { type: 'RESET_GAME' };
+  | { type: 'RESET_GAME' }
+  | { type: 'CHECK_BOARD' }
+  | { type: 'CHECK_DETECTION'; isCheck: boolean; message: string };
 
 // Backward compatibility for transition to v5
 export type ChessEvent = ChessEvents;
