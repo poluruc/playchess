@@ -1,5 +1,5 @@
 // __tests__/chessMoveValidation.test.ts
-import { ChessContext, Position } from '@/lib/chessMachine';
+import type { ChessContext, Position } from '@/lib/chessTypes';
 
 // Import the calculation function - we'll need to expose it or recreate it for testing
 function calculatePossibleMoves(

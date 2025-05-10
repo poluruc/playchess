@@ -1,238 +1,197 @@
-import { assign, createMachine } from 'xstate';
+import { assign, setup } from 'xstate';
+import type { ChessContext, ChessEvents } from './chessTypes';
 
-// Define the context (state) and events
-export interface Position {
-  row: number;
-  col: number;
-}
+// Initial chess board setup
+export const initialBoard: string[][] = [
+  ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
+  ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
+  ['', '', '', '', '', '', '', ''],
+  ['', '', '', '', '', '', '', ''],
+  ['', '', '', '', '', '', '', ''],
+  ['', '', '', '', '', '', '', ''],
+  ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
+  ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR'],
+];
 
-export interface ChessContext {
-  board: string[][];
-  currentPlayer: 'white' | 'black';
-  selectedPiece: Position | null;
-  possibleMoves: Position[];
-}
+// Initial context for the chess machine
+const initialContext: ChessContext = {
+  board: initialBoard,
+  currentPlayer: 'white',
+  selectedPiece: null,
+  possibleMoves: [],
+};
 
-export type ChessEvent = 
-  | { type: 'SELECT_PIECE'; position: Position }
-  | { type: 'MOVE_PIECE'; position: Position }
-  | { type: 'RESET_GAME' };
+// Simple function to check if a piece belongs to the current player
+const checkIsCurrentPlayersPiece = (piece: string, currentPlayer: 'white' | 'black'): boolean => {
+  if (!piece) return false;
+  return (piece.charAt(0) === 'w' && currentPlayer === 'white') || 
+         (piece.charAt(0) === 'b' && currentPlayer === 'black');
+};
 
-// Create the chess state machine
-export const chessMachine = createMachine({
-  id: 'chess',
-  initial: 'waitingForSelection',
-  context: {
-    board: initializeBoard(),
-    currentPlayer: 'white' as const,
-    selectedPiece: null,
-    possibleMoves: [],
+// Helper function to store the state in localStorage
+const storeState = (context: ChessContext) => {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('chessState', JSON.stringify(context));
+      console.log('Chess state stored in localStorage');
+    } catch (error) {
+      console.error('Failed to store chess state:', error);
+    }
+  }
+};
+
+// XState v5 machine with setup
+export const chessMachine = setup({
+  // Define types for the machine
+  types: {
+    context: {} as ChessContext,
+    events: {} as ChessEvents,
   },
+  // Define guards
+  guards: {
+    isCurrentPlayersPiece: ({ context, event }) => {
+      if (event.type !== 'SELECT_PIECE') return false;
+      try {
+        console.log('Guard checking piece ownership:', event);
+        
+        // Check if context is undefined
+        if (!context) {
+          console.error('Context is undefined in guard function');
+          return false;
+        }
+        
+        // Check if board is undefined
+        if (!context.board) {
+          console.error('Board is undefined in context');
+          return false;
+        }
+        
+        const { row, col } = event.position;
+        
+        // Safety checks
+        if (typeof row !== 'number' || typeof col !== 'number' ||
+            row < 0 || row >= context.board.length || 
+            col < 0 || col >= context.board[0].length) {
+          console.error('Invalid position:', { row, col });
+          return false;
+        }
+        
+        const piece = context.board[row][col];
+        
+        // Debug info
+        console.log('Checking piece:', {
+          piece,
+          position: { row, col },
+          currentPlayer: context.currentPlayer
+        });
+        
+        return checkIsCurrentPlayersPiece(piece, context.currentPlayer);
+      } catch (error) {
+        console.error('Error in isCurrentPlayersPiece guard:', error);
+        return false;
+      }
+    },
+    isSamePiece: ({ context, event }) => {
+      if (event.type !== 'SELECT_PIECE' || !context.selectedPiece) return false;
+      try {
+        const { row, col } = event.position;
+        return context.selectedPiece.row === row && context.selectedPiece.col === col;
+      } catch (error) {
+        console.error('Error in isSamePiece guard:', error);
+        return false;
+      }
+    }
+  },
+
+  // Define actions
+  actions: {
+    selectPiece: assign(({ context, event }) => {
+      if (event.type !== 'SELECT_PIECE') return {};
+      return {
+        selectedPiece: event.position,
+        possibleMoves: [] // In a full implementation, calculate moves here
+      };
+    }),
+    clearSelection: assign({
+      selectedPiece: null,
+      possibleMoves: []
+    }),
+    storeStateAction: ({ context }) => storeState(context),
+    resetGame: assign({
+      board: initialBoard,
+      currentPlayer: 'white',
+      selectedPiece: null,
+      possibleMoves: []
+    })
+  },
+  // Add async services for move calculation
+  services: {
+    calculateValidMoves: ({ context, event }) => {
+      // Return a promise that resolves with the valid moves
+      return Promise.resolve([]);
+      
+      // In a real implementation, this would be:
+      /* return new Promise((resolve) => {
+        if (event.type !== 'SELECT_PIECE') return resolve([]);
+        
+        const { row, col } = event.position;
+        const piece = context.board[row][col];
+        
+        // Calculate valid moves based on piece type, position, etc.
+        // This could be moved to a utility function
+        const validMoves = calculatePieceMoves(piece, row, col, context.board);
+        resolve(validMoves);
+      }); */
+    }
+  }
+}).createMachine({
+  id: 'chess',
+  initial: 'idle',
+  context: initialContext,
   states: {
-    waitingForSelection: {
+    idle: {
       on: {
         SELECT_PIECE: {
           target: 'pieceSelected',
-          actions: 'selectPiece',
-          guard: ({context, event}) => {
-            if (!event || event.type !== 'SELECT_PIECE' || !event.position) {
-              return false;
-            }
-            
-            const { row, col } = event.position;
-            if (row < 0 || row > 7 || col < 0 || col > 7) {
-              return false;
-            }
-            
-            const piece = context.board[row][col];
-            if (!piece) {
-              return false;
-            }
-            
-            const pieceColor = piece.charAt(0) === 'w' ? 'white' : 'black';
-            return pieceColor === context.currentPlayer;
-          }
+          guard: 'isCurrentPlayersPiece',
+          actions: ['selectPiece', 'storeStateAction']
+        },
+        RESET_GAME: {
+          target: 'idle',
+          actions: ['resetGame', 'storeStateAction']
         }
       }
     },
     pieceSelected: {
+      // Optional: invoke the async move calculator service
+      // invoke: {
+      //   src: 'calculateValidMoves',
+      //   onDone: {
+      //     actions: assign({
+      //       possibleMoves: ({ event }) => event.output
+      //     })
+      //   }
+      // },
       on: {
-        MOVE_PIECE: {
-          target: 'waitingForSelection',
-          actions: ['movePiece', 'switchPlayer'],
-          guard: ({context, event}) => {
-            if (!event || event.type !== 'MOVE_PIECE' || !event.position) {
-              return false;
-            }
-            
-            return context.possibleMoves.some(
-              move => move.row === event.position.row && move.col === event.position.col
-            );
-          }
-        },
         SELECT_PIECE: [
           {
-            target: 'pieceSelected',
-            actions: 'selectPiece',
-            guard: ({context, event}) => {
-              if (!event || event.type !== 'SELECT_PIECE' || !event.position) {
-                return false;
-              }
-              
-              const { row, col } = event.position;
-              if (row < 0 || row > 7 || col < 0 || col > 7) {
-                return false;
-              }
-              
-              const piece = context.board[row][col];
-              if (!piece) {
-                return false;
-              }
-              
-              const pieceColor = piece.charAt(0) === 'w' ? 'white' : 'black';
-              return pieceColor === context.currentPlayer;
-            }
+            // If selecting the same piece again, deselect it
+            target: 'idle',
+            guard: 'isSamePiece',
+            actions: ['clearSelection', 'storeStateAction']
           },
           {
-            target: 'waitingForSelection',
-            actions: 'clearSelection'
+            // If selecting different piece of same player, update selection
+            target: 'pieceSelected',
+            guard: 'isCurrentPlayersPiece',
+            actions: ['selectPiece', 'storeStateAction']
           }
-        ]
-      }
-    }
-  },
-  on: {
-    RESET_GAME: {
-      actions: 'resetGame',
-      target: '.waitingForSelection'
-    }
-  }
-}, {
-  actions: {
-    selectPiece: assign((context, event: any) => {
-      if (event && event.type === 'SELECT_PIECE' && event.position) {
-        console.log('Selecting piece:', event.position);
-        return {
-          selectedPiece: event.position,
-          possibleMoves: calculatePossibleMoves(context, event.position)
-        };
-      }
-      return {};
-    }),
-    clearSelection: assign({
-      selectedPiece: () => null,
-      possibleMoves: () => []
-    }),
-    movePiece: assign((context, event) => {
-      if (event && typeof event === 'object' && 'type' in event && event.type === 'MOVE_PIECE' && event.position && context.selectedPiece) {
-        console.log('Debug - Moving piece from', context.selectedPiece, 'to', event.position);
-        const newBoard = context.board.map(row => [...row]);
-        const { row: fromRow, col: fromCol } = context.selectedPiece;
-        const { row: toRow, col: toCol } = event.position;
-        
-        // Move the piece
-        newBoard[toRow][toCol] = newBoard[fromRow][fromCol];
-        newBoard[fromRow][fromCol] = '';
-        
-        return {
-          board: newBoard,
-          selectedPiece: null,
-          possibleMoves: []
-        };
-      }
-      return {};
-    }),
-    switchPlayer: assign({
-      currentPlayer: (context) => context.currentPlayer === 'white' ? 'black' : 'white'
-    }),
-    resetGame: assign({
-      board: () => initializeBoard(),
-      currentPlayer: () => 'white',
-      selectedPiece: () => null,
-      possibleMoves: () => []
-    })
-  }
-});
-
-// Helper function to initialize the chess board
-function initializeBoard(): string[][] {
-  const board: string[][] = Array(8).fill(null).map(() => Array(8).fill(''));
-  
-  // Set up pawns
-  for (let i = 0; i < 8; i++) {
-    board[1][i] = 'bP'; // Black pawns
-    board[6][i] = 'wP'; // White pawns
-  }
-  
-  // Set up the back rows
-  const backRow = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
-  for (let i = 0; i < 8; i++) {
-    board[0][i] = 'b' + backRow[i]; // Black back row
-    board[7][i] = 'w' + backRow[i]; // White back row
-  }
-  
-  return board;
-}
-
-// Helper function to calculate possible moves
-function calculatePossibleMoves(
-  context: ChessContext,
-  position: Position
-): Position[] {
-  const { row, col } = position;
-  const piece = context.board[row][col];
-  
-  if (!piece) return [];
-  
-  const pieceType = piece.charAt(1);
-  const color = piece.charAt(0) === 'w' ? 'white' : 'black';
-  
-  // For simplicity, we'll just implement basic pawn movement
-  // In a complete chess game, you'd need to implement rules for all piece types
-  if (pieceType === 'P') {
-    const moves: Position[] = [];
-    const direction = color === 'white' ? -1 : 1;
-    const startRow = color === 'white' ? 6 : 1;
-    
-    // Move forward one square
-    if (
-      row + direction >= 0 &&
-      row + direction < 8 &&
-      context.board[row + direction][col] === ''
-    ) {
-      moves.push({ row: row + direction, col });
-      
-      // Move forward two squares from starting position
-      if (
-        row === startRow &&
-        context.board[row + 2 * direction][col] === ''
-      ) {
-        moves.push({ row: row + 2 * direction, col });
-      }
-    }
-    
-    // Capture diagonally
-    for (const colOffset of [-1, 1]) {
-      if (
-        row + direction >= 0 &&
-        row + direction < 8 &&
-        col + colOffset >= 0 &&
-        col + colOffset < 8
-      ) {
-        const targetPiece = context.board[row + direction][col + colOffset];
-        if (
-          targetPiece &&
-          (color === 'white' ? targetPiece.charAt(0) === 'b' : targetPiece.charAt(0) === 'w')
-        ) {
-          moves.push({ row: row + direction, col: col + colOffset });
+        ],
+        RESET_GAME: {
+          target: 'idle',
+          actions: ['resetGame', 'storeStateAction']
         }
       }
     }
-    
-    return moves;
   }
-  
-  // For other piece types, we'd implement their movement rules here
-  // For now, returning empty array for non-pawn pieces
-  return [];
-}
+});

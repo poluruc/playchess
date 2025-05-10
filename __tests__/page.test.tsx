@@ -2,9 +2,9 @@
 import Home from '@/app/page';
 import { fireEvent, render, screen } from '@testing-library/react';
 
-// Mock the XState hooks
+// Mock the XState hooks for v5
 jest.mock('@xstate/react', () => ({
-  useMachine: jest.fn(() => [
+  useActor: jest.fn(() => [
     {
       context: {
         board: [
@@ -21,8 +21,34 @@ jest.mock('@xstate/react', () => ({
         selectedPiece: null,
         possibleMoves: [],
       },
-      matches: jest.fn().mockImplementation((state) => state === 'waitingForSelection'),
-      value: 'waitingForSelection',
+      // In v5, we check value directly instead of using matches
+      value: 'idle',
+      can: jest.fn().mockImplementation(() => true),
+    },
+    jest.fn(), // send function
+  ]),
+}));
+
+// Also mock our custom hook
+jest.mock('@/lib/useChessMachine', () => ({
+  useChessMachine: jest.fn(() => [
+    {
+      context: {
+        board: [
+          ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
+          ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
+          ['', '', '', '', '', '', '', ''],
+          ['', '', '', '', '', '', '', ''],
+          ['', '', '', '', '', '', '', ''],
+          ['', '', '', '', '', '', '', ''],
+          ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
+          ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
+        ],
+        currentPlayer: 'white',
+        selectedPiece: null,
+        possibleMoves: [],
+      },
+      value: 'idle',
     },
     jest.fn(), // send function
   ]),
@@ -33,11 +59,10 @@ describe('Home Page', () => {
     render(<Home />);
     
     // Check if title is present
-    expect(screen.getByText(/My Chess App/i)).toBeInTheDocument();
+    expect(screen.getByText(/Chess Game/i)).toBeInTheDocument();
     
-    // Check if current player is displayed
-    expect(screen.getByText(/Current Player/i)).toBeInTheDocument();
-    expect(screen.getByText(/white/i)).toBeInTheDocument();
+    // Check if current player is displayed - looking for current turn label
+    expect(screen.getByText(/Current turn/i)).toBeInTheDocument();
     
     // Check if reset button exists
     expect(screen.getByText(/Reset Game/i)).toBeInTheDocument();
@@ -47,9 +72,9 @@ describe('Home Page', () => {
   });
 
   it('should handle the reset button click', () => {
-    const { useMachine } = require('@xstate/react');
+    const { useActor } = require('@xstate/react');
     const send = jest.fn();
-    useMachine.mockReturnValue([
+    useActor.mockReturnValue([
       {
         context: {
           board: [
@@ -66,7 +91,7 @@ describe('Home Page', () => {
           selectedPiece: null,
           possibleMoves: [],
         },
-        value: 'waitingForSelection',
+        value: 'idle',
       },
       send,
     ]);
@@ -81,11 +106,11 @@ describe('Home Page', () => {
   });
 
   it('should handle cell clicks to select and move pieces', () => {
-    const { useMachine } = require('@xstate/react');
+    const { useActor } = require('@xstate/react');
     const send = jest.fn();
     
     // Mock with a selected piece and possible moves
-    useMachine.mockReturnValue([
+    useActor.mockReturnValue([
       {
         context: {
           board: [

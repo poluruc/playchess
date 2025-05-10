@@ -1,7 +1,56 @@
 'use client';
 import { useState } from 'react';
+import { initialBoard } from '../lib/chessMachine';
+import { useChessMachine } from '../lib/useChessMachine';
 
 export default function Home() {
+  // Use our custom chess machine hook to get state and send function
+  const [state, send] = useChessMachine();
+  
+  // Safely extract context values using v5's snapshot pattern
+  const board = state.context?.board || initialBoard;
+  const currentPlayer = state.context?.currentPlayer || 'white';
+  const selectedPiece = state.context?.selectedPiece || null;
+  const possibleMoves = state.context?.possibleMoves || [];
+  
+  // Handlers for chess actions
+  const handlePieceClick = (row: number, col: number) => {
+    // Convert to numbers and verify they are valid
+    const rowNum = Number(row);
+    const colNum = Number(col);
+    
+    if (isNaN(rowNum) || isNaN(colNum)) {
+      console.error('Invalid position values in handlePieceClick:', { row, col });
+      return;
+    }
+    
+    // Debug the values being sent
+    console.log('Sending SELECT_PIECE event with position:', { row: rowNum, col: colNum });
+    
+    // Create a properly typed event with XState v5 syntax
+    const selectPieceEvent = {
+      type: 'SELECT_PIECE' as const,
+      position: { 
+        row: rowNum, 
+        col: colNum 
+      }
+    };
+    
+    // Debug the full event
+    console.log('Full event object:', selectPieceEvent);
+    
+    try {
+      // Send the event using v5 style
+      send(selectPieceEvent);
+    } catch (error) {
+      console.error('Error sending SELECT_PIECE event:', error);
+    }
+  };
+  
+  const handleResetGame = () => {
+    send({ type: 'RESET_GAME' as const });
+  };
+  
   // Function to calculate valid moves for a piece (simplified version)
   const getValidMoves = (board: string[][], row: number, col: number): {row: number, col: number}[] => {
     const piece = board[row][col];
@@ -153,96 +202,81 @@ export default function Home() {
     return moves;
   };
 
-  // Initialize the chess board with the starting position
-  const [board, setBoard] = useState([
-    ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
-    ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-    ['', '', '', '', '', '', '', ''],
-    ['', '', '', '', '', '', '', ''],
-    ['', '', '', '', '', '', '', ''],
-    ['', '', '', '', '', '', '', ''],
-    ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-    ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR'],
-  ]);
-
-  const [currentPlayer, setCurrentPlayer] = useState<'white' | 'black'>('white');
-  const [selectedPiece, setSelectedPiece] = useState<{row: number, col: number} | null>(null);
+  // Using state from the XState machine instead of local state
+  // The board and currentPlayer are now managed by the state machine
+  
+  // We still need these local states for UI purposes
   const [validMoves, setValidMoves] = useState<{row: number, col: number}[]>([]);
   const [lastMove, setLastMove] = useState<{from: {row: number, col: number}, to: {row: number, col: number}} | null>(null);
 
-  // Handle cell click
+  // Handle cell click - using the state machine
   const handleCellClick = (row: number, col: number) => {
+    // Ensure row and col are numbers (not strings)
+    const rowNum = Number(row);
+    const colNum = Number(col);
+    
+    // Check if the conversion resulted in valid numbers
+    if (isNaN(rowNum) || isNaN(colNum)) {
+      console.error('Invalid coordinates passed to handleCellClick:', { row, col });
+      return;
+    }
+    
+    console.log('handleCellClick called with:', { 
+      rowNum, 
+      colNum, 
+      typeof: { row: typeof rowNum, col: typeof colNum },
+      isNaN: { row: isNaN(rowNum), col: isNaN(colNum) }
+    });
+    
+    // Create a proper position object that will be used in events
+    const position = { row: rowNum, col: colNum };
+    
     // Get the piece at clicked position
-    const clickedPiece = board[row][col];
+    const clickedPiece = board[rowNum][colNum];
     
     // If there's a selected piece and we're clicking on a different cell
     if (selectedPiece) {
-      // If clicked on the same piece, deselect it
-      if (selectedPiece.row === row && selectedPiece.col === col) {
-        setSelectedPiece(null);
-        setValidMoves([]);
-        return;
-      }
-      
-      // If clicked on another piece of the same player, select that piece instead
-      if (clickedPiece && 
-          ((clickedPiece.charAt(0) === 'w' && currentPlayer === 'white') || 
-           (clickedPiece.charAt(0) === 'b' && currentPlayer === 'black'))) {
-        const newValidMoves = getValidMoves(board, row, col);
-        setSelectedPiece({row, col});
+      // Pass the click to the state machine to handle selection/deselection
+      console.log('Selected piece exists, sending position to state machine:', position);
+      handlePieceClick(rowNum, colNum);
+
+      // Calculate valid moves for UI highlights
+      if (board[rowNum][colNum] && 
+          ((board[rowNum][colNum].charAt(0) === 'w' && currentPlayer === 'white') || 
+           (board[rowNum][colNum].charAt(0) === 'b' && currentPlayer === 'black'))){
+        const newValidMoves = getValidMoves(board, rowNum, colNum);
         setValidMoves(newValidMoves);
-        return;
-      }
-      
-      // Check if the clicked cell is a valid move
-      const isValidMove = validMoves.some(move => move.row === row && move.col === col);
-      
-      // If this is a valid move, move the piece
-      if (isValidMove) {
-        const sourceRow = selectedPiece.row;
-        const sourceCol = selectedPiece.col;
-        const sourcePiece = board[sourceRow][sourceCol];
-        
-        // Create a new board with the piece moved
-        const newBoard = board.map(row => [...row]);
-        newBoard[sourceRow][sourceCol] = '';
-        newBoard[row][col] = sourcePiece;
-        
-        // Update the board and change the current player
-        setBoard(newBoard);
-        setCurrentPlayer(currentPlayer === 'white' ? 'black' : 'white');
-        setLastMove({
-          from: {row: sourceRow, col: sourceCol},
-          to: {row, col}
-        });
-        setSelectedPiece(null);
+      } else {
         setValidMoves([]);
+      }
+
+      // Update last move if applicable
+      // In a full implementation, we would get this from the state machine
+      // For now, just track it locally
+      if (selectedPiece && selectedPiece.row !== rowNum && selectedPiece.col !== colNum) {
+        setLastMove({
+          from: {row: selectedPiece.row, col: selectedPiece.col},
+          to: {row: rowNum, col: colNum}
+        });
       }
     }
     // If no piece is selected yet, select one if it belongs to the current player
     else if (clickedPiece && 
         ((clickedPiece.charAt(0) === 'w' && currentPlayer === 'white') || 
          (clickedPiece.charAt(0) === 'b' && currentPlayer === 'black'))) {
-      const newValidMoves = getValidMoves(board, row, col);
-      setSelectedPiece({row, col});
+      
+      // Use the state machine's handler
+      handlePieceClick(rowNum, colNum);
+      
+      // Calculate valid moves for UI purposes
+      const newValidMoves = getValidMoves(board, rowNum, colNum);
       setValidMoves(newValidMoves);
     }
   };
 
-  // Reset game function
+  // Reset game function - using state machine's handler
   const resetGame = () => {
-    setBoard([
-      ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
-      ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-      ['', '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', ''],
-      ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-      ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR'],
-    ]);
-    setCurrentPlayer('white');
-    setSelectedPiece(null);
+    handleResetGame(); // Use the state machine's reset function
     setValidMoves([]);
     setLastMove(null);
   };

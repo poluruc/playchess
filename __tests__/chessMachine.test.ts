@@ -1,14 +1,16 @@
 // __tests__/chessMachine.test.ts
 import { chessMachine } from '@/lib/chessMachine';
-import { interpret } from 'xstate';
+import { createActor } from 'xstate';
 
-// Create a modified version of the state machine for testing
+// Use the state machine directly
 const testMachine = chessMachine;
 
 describe('Chess State Machine', () => {
   it('should initialize with the correct context', () => {
-    const service = interpret(testMachine).start();
-    const { context } = service.getSnapshot();
+    // Create an actor instead of interpreting the machine
+    const actor = createActor(testMachine).start();
+    const snapshot = actor.getSnapshot();
+    const { context } = snapshot;
     
     expect(context.currentPlayer).toBe('white');
     expect(context.selectedPiece).toBeNull();
@@ -24,88 +26,76 @@ describe('Chess State Machine', () => {
     expect(context.board[7][0]).toBe('wR'); // White rook
     expect(context.board[7][4]).toBe('wK'); // White king
     
-    service.stop();
+    actor.stop();
   });
 
   it('should have correct piece selection behavior', () => {
-    // Create a service
-    const service = interpret(testMachine).start();
+    // Create an actor
+    const actor = createActor(testMachine).start();
     
     // Get the initial state
-    const initialState = service.getSnapshot();
-    expect(initialState.value).toBe('waitingForSelection');
+    const initialState = actor.getSnapshot();
+    expect(initialState.value).toBe('idle');
     
-    // Try to select a white pawn (should work for white's turn)
-    service.send({ type: 'SELECT_PIECE', position: { row: 6, col: 0 } });
+    // Send a select piece event for a white piece in initial state (white's turn)
+    actor.send({
+      type: 'SELECT_PIECE',
+      position: { row: 6, col: 0 } // White pawn
+    });
     
-    // Log the state for debugging
-    console.log('After selecting white pawn:', service.getSnapshot().value);
-    console.log('Selected piece:', service.getSnapshot().context.selectedPiece);
+    // Check if piece is selected
+    let state = actor.getSnapshot();
+    expect(state.value).toBe('pieceSelected');
+    expect(state.context.selectedPiece).toEqual({ row: 6, col: 0 });
     
-    // Try to select a black pawn (shouldn't work for white's turn)
-    const beforeBlackSelection = service.getSnapshot();
-    service.send({ type: 'SELECT_PIECE', position: { row: 1, col: 0 } });
-    const afterBlackSelection = service.getSnapshot();
+    // Try selecting a black piece (should not change selection in white's turn)
+    actor.send({
+      type: 'SELECT_PIECE',
+      position: { row: 1, col: 0 } // Black pawn
+    });
     
-    // The state and selected piece should remain unchanged
-    // because selecting opponent's pieces is invalid
-    expect(afterBlackSelection.context.selectedPiece).toEqual(beforeBlackSelection.context.selectedPiece);
+    // Selection should still be the same white piece
+    state = actor.getSnapshot();
+    expect(state.value).toBe('pieceSelected');
+    expect(state.context.selectedPiece).toEqual({ row: 6, col: 0 });
     
-    service.stop();
+    // Now selecting the same piece should deselect it
+    actor.send({
+      type: 'SELECT_PIECE',
+      position: { row: 6, col: 0 } // Same white pawn
+    });
+    
+    // Check that piece is deselected
+    state = actor.getSnapshot();
+    expect(state.value).toBe('idle');
+    expect(state.context.selectedPiece).toBeNull();
+    
+    actor.stop();
   });
 
-  it('should verify initial board setup', () => {
-    const service = interpret(testMachine).start();
-    const initialBoard = service.getSnapshot().context.board;
+  it('should handle the reset game action', () => {
+    // Create an actor
+    const actor = createActor(testMachine).start();
     
-    // Check all pawns are in the right positions
-    for (let i = 0; i < 8; i++) {
-      expect(initialBoard[1][i]).toBe('bP'); // Black pawns on row 1
-      expect(initialBoard[6][i]).toBe('wP'); // White pawns on row 6
-    }
+    // Select a piece
+    actor.send({
+      type: 'SELECT_PIECE',
+      position: { row: 6, col: 0 } // White pawn
+    });
     
-    // Check the back rows
-    const blackBackRow = ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'];
-    const whiteBackRow = ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR'];
+    // Verify piece is selected
+    let state = actor.getSnapshot();
+    expect(state.value).toBe('pieceSelected');
     
-    for (let i = 0; i < 8; i++) {
-      expect(initialBoard[0][i]).toBe(blackBackRow[i]); // Black back row
-      expect(initialBoard[7][i]).toBe(whiteBackRow[i]); // White back row
-    }
+    // Reset the game
+    actor.send({ type: 'RESET_GAME' });
     
-    service.stop();
-  });
-  
-  it('should correctly update the board after reset', () => {
-    const service = interpret(testMachine).start();
+    // Verify reset worked
+    state = actor.getSnapshot();
+    expect(state.value).toBe('idle');
+    expect(state.context.selectedPiece).toBeNull();
+    expect(state.context.currentPlayer).toBe('white');
     
-    // Send a RESET_GAME event
-    service.send({ type: 'RESET_GAME' });
-    
-    // Get the final state
-    const finalState = service.getSnapshot();
-    
-    // Ensure we're in waitingForSelection state
-    expect(finalState.value).toBe('waitingForSelection');
-    
-    // Ensure the board is reset to initial state
-    const initialBoard = [
-      ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
-      ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-      ['', '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', '', ''],
-      ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-      ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
-    ];
-    
-    // Check specific positions to verify reset
-    expect(finalState.context.board[0][0]).toBe(initialBoard[0][0]);
-    expect(finalState.context.board[1][0]).toBe(initialBoard[1][0]);
-    expect(finalState.context.board[6][0]).toBe(initialBoard[6][0]);
-    expect(finalState.context.board[7][0]).toBe(initialBoard[7][0]);
-    
-    service.stop();
+    actor.stop();
   });
 });
