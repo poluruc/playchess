@@ -9,6 +9,7 @@ export interface ChessContext {
   currentPlayer: 'white' | 'black';
   selectedPiece: Position | null;
   possibleMoves: Position[];
+  error: string | null; // Add this line
 }
 
 // Events in XState v5 format

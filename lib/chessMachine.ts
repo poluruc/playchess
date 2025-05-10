@@ -19,6 +19,7 @@ const initialContext: ChessContext = {
   currentPlayer: 'white',
   selectedPiece: null,
   possibleMoves: [],
+  error: null // Add error field for toast notifications
 };
 
 // Simple function to check if a piece belongs to the current player
@@ -298,19 +299,22 @@ export const chessMachine = setup({
       
       return {
         selectedPiece: event.position,
-        possibleMoves: validMoves
+        possibleMoves: validMoves,
+        error: null // Clear any previous errors
       };
     }),
     clearSelection: assign({
       selectedPiece: null,
-      possibleMoves: []
+      possibleMoves: [],
+      error: null
     }),
     storeStateAction: ({ context }) => storeState(context),
     resetGame: assign({
       board: initialBoard,
       currentPlayer: 'white',
       selectedPiece: null,
-      possibleMoves: []
+      possibleMoves: [],
+      error: null
     }),
     movePiece: assign(({ context, event }) => {
       if (event.type !== 'MOVE_PIECE' || !context.selectedPiece) return {};
@@ -326,28 +330,40 @@ export const chessMachine = setup({
       newBoard[fromRow][fromCol] = '';
       
       // Switch players
-      const newCurrentPlayer = context.currentPlayer === 'white' ? 'black' : 'white';
+      const newCurrentPlayer = context.currentPlayer === 'white' ? 'black' as const : 'white' as const;
       
       return {
         board: newBoard,
         currentPlayer: newCurrentPlayer,
         selectedPiece: null,
-        possibleMoves: []
+        possibleMoves: [],
+        error: null
       };
+    }),
+    // Add error actions for toast notifications
+    setErrorInvalidMove: assign({
+      error: "That move is not allowed!"
+    }),
+    setErrorWrongPiece: assign({
+      error: "That's not your piece!"
+    }),
+    setErrorMustSelectPiece: assign({
+      error: "You must select a piece first!"
     })
-  },
-  // Add async services for move calculation
-  services: {
-    calculateValidMoves: ({ context, event }) => {
-      // Return a promise that resolves with the valid moves
+  }
+  // Services are configured differently in XState v5
+  /* We'll handle valid move calculations with actions instead
+  actors: {
+    calculateValidMoves: fromPromise(({ input }) => {
       return new Promise((resolve) => {
-        if (event.type !== 'SELECT_PIECE') return resolve([]);
+        if (!input.position) return resolve([]);
         
-        const validMoves = calculateValidMoves(context.board, event.position);
+        const validMoves = calculateValidMoves(input.board, input.position);
         resolve(validMoves);
       });
-    }
+    })
   }
+  */
 }).createMachine({
   id: 'chess',
   initial: 'idle',
@@ -355,10 +371,25 @@ export const chessMachine = setup({
   states: {
     idle: {
       on: {
-        SELECT_PIECE: {
-          target: 'pieceSelected',
-          guard: 'isCurrentPlayersPiece',
-          actions: ['selectPiece', 'storeStateAction']
+        SELECT_PIECE: [
+          {
+            target: 'pieceSelected',
+            guard: ({ context, event }) => {
+              if (event.type !== 'SELECT_PIECE') return false;
+              const { row, col } = event.position;
+              const piece = context.board[row][col];
+              return checkIsCurrentPlayersPiece(piece, context.currentPlayer);
+            },
+            actions: ['selectPiece', 'storeStateAction']
+          },
+          {
+            // When selecting wrong piece, set error but stay in idle state
+            actions: ['setErrorWrongPiece']
+          }
+        ],
+        MOVE_PIECE: {
+          // If trying to move without selecting a piece
+          actions: ['setErrorMustSelectPiece']
         },
         RESET_GAME: {
           target: 'idle',
@@ -381,21 +412,45 @@ export const chessMachine = setup({
           {
             // If selecting the same piece again, deselect it
             target: 'idle',
-            guard: 'isSamePiece',
+            guard: ({ context, event }) => {
+              if (event.type !== 'SELECT_PIECE' || !context.selectedPiece) return false;
+              const { row, col } = event.position;
+              return context.selectedPiece.row === row && context.selectedPiece.col === col;
+            },
             actions: ['clearSelection', 'storeStateAction']
           },
           {
             // If selecting different piece of same player, update selection
             target: 'pieceSelected',
-            guard: 'isCurrentPlayersPiece',
+            guard: ({ context, event }) => {
+              if (event.type !== 'SELECT_PIECE') return false;
+              const { row, col } = event.position;
+              const piece = context.board[row][col];
+              return checkIsCurrentPlayersPiece(piece, context.currentPlayer);
+            },
             actions: ['selectPiece', 'storeStateAction']
+          },
+          {
+            // When selecting wrong piece, set error but maintain selection
+            actions: ['setErrorWrongPiece']
           }
         ],
-        MOVE_PIECE: {
-          target: 'idle',
-          guard: 'isValidMoveTarget',
-          actions: ['movePiece', 'storeStateAction']
-        },
+        MOVE_PIECE: [
+          {
+            target: 'idle',
+            guard: ({ context, event }) => {
+              if (event.type !== 'MOVE_PIECE' || !context.selectedPiece) return false;
+              const { row: fromRow, col: fromCol } = context.selectedPiece;
+              const { row: toRow, col: toCol } = event.position;
+              return isValidMove(context.board, fromRow, fromCol, toRow, toCol);
+            },
+            actions: ['movePiece', 'storeStateAction']
+          },
+          {
+            // When move is invalid
+            actions: ['setErrorInvalidMove']
+          }
+        ],
         RESET_GAME: {
           target: 'idle',
           actions: ['resetGame', 'storeStateAction']

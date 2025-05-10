@@ -1,150 +1,68 @@
-// __tests__/page.test.tsx
-import Home from '@/app/page';
+import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
+import Home from '../app/page';
+import { useChessMachine } from '../lib/useChessMachine';
 
-// Mock the XState hooks for v5
-jest.mock('@xstate/react', () => ({
-  useActor: jest.fn(() => [
-    {
-      context: {
-        board: [
-          ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
-          ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-          ['', '', '', '', '', '', '', ''],
-          ['', '', '', '', '', '', '', ''],
-          ['', '', '', '', '', '', '', ''],
-          ['', '', '', '', '', '', '', ''],
-          ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-          ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
-        ],
-        currentPlayer: 'white',
-        selectedPiece: null,
-        possibleMoves: [],
-      },
-      // In v5, we check value directly instead of using matches
-      value: 'idle',
-      can: jest.fn().mockImplementation(() => true),
-    },
-    jest.fn(), // send function
-  ]),
+// Mock the useChessMachine hook
+jest.mock('../lib/useChessMachine', () => ({
+  useChessMachine: jest.fn()
 }));
 
-// Also mock our custom hook
-jest.mock('@/lib/useChessMachine', () => ({
-  useChessMachine: jest.fn(() => [
-    {
-      context: {
-        board: [
-          ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
-          ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-          ['', '', '', '', '', '', '', ''],
-          ['', '', '', '', '', '', '', ''],
-          ['', '', '', '', '', '', '', ''],
-          ['', '', '', '', '', '', '', ''],
-          ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-          ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
-        ],
-        currentPlayer: 'white',
-        selectedPiece: null,
-        possibleMoves: [],
-      },
-      value: 'idle',
-    },
-    jest.fn(), // send function
-  ]),
-}));
-
-describe('Home Page', () => {
-  it('should render the chess board', () => {
-    render(<Home />);
-    
-    // Check if title is present
-    expect(screen.getByText(/Chess Game/i)).toBeInTheDocument();
-    
-    // Check if current player is displayed - looking for current turn label
-    expect(screen.getByText(/Current turn/i)).toBeInTheDocument();
-    
-    // Check if reset button exists
-    expect(screen.getByText(/Reset Game/i)).toBeInTheDocument();
-    
-    // We could also check for the chess board cells, but that would be more complex
-    // since they might not have easily identifiable text content
+describe('Home', () => {
+  const mockSend = jest.fn();
+  const mockState = {
+    value: 'idle',
+    context: {
+      board: [
+        ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
+        ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
+        ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR'],
+      ],
+      currentPlayer: 'white',
+      selectedPiece: null,
+      possibleMoves: []
+    }
+  };
+  
+  beforeEach(() => {
+    (useChessMachine as jest.Mock).mockReturnValue([mockState, mockSend]);
   });
-
-  it('should handle the reset button click', () => {
-    const { useActor } = require('@xstate/react');
-    const send = jest.fn();
-    useActor.mockReturnValue([
-      {
-        context: {
-          board: [
-            ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
-            ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-            ['', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', ''],
-            ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-            ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
-          ],
-          currentPlayer: 'white',
-          selectedPiece: null,
-          possibleMoves: [],
-        },
-        value: 'idle',
-      },
-      send,
-    ]);
-
+  
+  it('renders a chess board', () => {
     render(<Home />);
-    
-    // Click the reset button
-    fireEvent.click(screen.getByText(/Reset Game/i));
-    
-    // Check if the correct action was sent to the state machine
-    expect(send).toHaveBeenCalledWith({ type: 'RESET_GAME' });
+    expect(screen.getByText('Chess Game')).toBeInTheDocument();
   });
-
-  it('should handle cell clicks to select and move pieces', () => {
-    const { useActor } = require('@xstate/react');
-    const send = jest.fn();
-    
-    // Mock with a selected piece and possible moves
-    useActor.mockReturnValue([
-      {
-        context: {
-          board: [
-            ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
-            ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
-            ['', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', ''],
-            ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
-            ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR']
-          ],
-          currentPlayer: 'white',
-          selectedPiece: { row: 6, col: 0 }, // White pawn selected
-          possibleMoves: [
-            { row: 5, col: 0 }, // Move forward one
-            { row: 4, col: 0 }  // Move forward two
-          ],
-        },
-        value: 'pieceSelected',
-      },
-      send,
-    ]);
-
-    // Render the page
+  
+  it('calls send with SELECT_PIECE when a piece is clicked', () => {
     render(<Home />);
     
-    // Since the board cells don't have easily selectable attributes, 
-    // we'll test the cell click handler logic directly
+    // Find a chess piece (white pawn) and click it
+    const cells = document.querySelectorAll('[class*="flex items-center justify-center"]');
+    const whitePawnCell = cells[6 * 8 + 0]; // Row 6, Col 0
     
-    // This simulates clicking on a cell directly
-    fireEvent.click(screen.getByText('Reset Game'));
+    fireEvent.click(whitePawnCell);
     
-    // Verify the send function was called with RESET_GAME
-    expect(send).toHaveBeenCalledWith({ type: 'RESET_GAME' });
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'SELECT_PIECE',
+        position: expect.objectContaining({ row: 6, col: 0 })
+      })
+    );
+  });
+  
+  it('calls send with RESET_GAME when the reset button is clicked', () => {
+    render(<Home />);
+    
+    const resetButton = screen.getByText('Reset Game');
+    fireEvent.click(resetButton);
+    
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'RESET_GAME' })
+    );
   });
 });

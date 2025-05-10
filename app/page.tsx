@@ -1,17 +1,28 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { toast } from "sonner";
 import { initialBoard } from '../lib/chessMachine';
 import { useChessMachine } from '../lib/useChessMachine';
 
 export default function Home() {
   // Use our custom chess machine hook to get state and send function
   const [state, send] = useChessMachine();
-  
+
   // Safely extract context values using v5's snapshot pattern
   const board = state.context?.board || initialBoard;
   const currentPlayer = state.context?.currentPlayer || 'white';
   const selectedPiece = state.context?.selectedPiece || null;
   const possibleMoves = state.context?.possibleMoves || [];
+  const error = state.context?.error;
+
+  // Show toast when error changes
+  useEffect(() => {
+  if (error) {
+    toast.error(error, {
+      duration: 3000,
+    });
+  }
+}, [error]);
   
   // Handlers for chess actions
   const handlePieceClick = (row: number, col: number) => {
@@ -88,47 +99,48 @@ export default function Home() {
     
     // If there's a selected piece and we're clicking on a different cell
     if (selectedPiece) {
-      // Check if we're clicking on a possible move target
-      const isMovingTo = possibleMoves.some(move => move.row === rowNum && move.col === colNum);
+      // Check if we're clicking on the same piece that's already selected
+      const isClickingSelectedPiece = selectedPiece.row === rowNum && selectedPiece.col === colNum;
       
-      if (isMovingTo) {
-        // If clicking on a valid move target, send MOVE_PIECE event
-        console.log('Moving piece to:', position);
+      if (isClickingSelectedPiece) {
+        // If clicking on the same piece, use SELECT_PIECE to trigger deselection
+        console.log('Clicking on selected piece - should deselect:', position);
+        handlePieceClick(rowNum, colNum);
+        setValidMoves([]);
+      } else {
+        // Check if we're clicking on a possible move target
+        const isMovingTo = possibleMoves.some(move => move.row === rowNum && move.col === colNum);
+        
+        // If clicking on any other cell while a piece is selected, treat it as a move attempt
+        console.log('Attempting to move piece to:', position);
         handleMovePiece(rowNum, colNum);
         
-        // Update last move for highlighting
-        setLastMove({
-          from: {row: selectedPiece.row, col: selectedPiece.col},
-          to: {row: rowNum, col: colNum}
-        });
-        
-        // Clear valid moves display since the move is now complete
-        setValidMoves([]);
-      } else if (board[rowNum][colNum] && 
-                ((board[rowNum][colNum].charAt(0) === 'w' && currentPlayer === 'white') || 
-                 (board[rowNum][colNum].charAt(0) === 'b' && currentPlayer === 'black'))) {
-        // If clicking on another of our pieces, select that piece instead
-        console.log('Selecting different piece:', position);
-        handlePieceClick(rowNum, colNum);
-        
-        // The valid moves will be calculated by the state machine and available in possibleMoves
-      setValidMoves([...possibleMoves]);
-      } else {
-        // If clicking elsewhere, just try selecting/deselecting
-        console.log('Deselecting current piece');
-        handlePieceClick(rowNum, colNum);
-        setValidMoves([]);
+        // If this was a valid move, update last move for highlighting
+        if (isMovingTo) {
+          setLastMove({
+            from: {row: selectedPiece.row, col: selectedPiece.col},
+            to: {row: rowNum, col: colNum}
+          });
+          
+          // Clear valid moves display since the move is now complete
+          setValidMoves([]);
+        }
       }
-    }      // If no piece is selected yet, select one if it belongs to the current player
-    else if (clickedPiece && 
-        ((clickedPiece.charAt(0) === 'w' && currentPlayer === 'white') || 
-         (clickedPiece.charAt(0) === 'b' && currentPlayer === 'black'))) {
+    } 
+    // If no piece is selected yet and there's a piece at the clicked position
+    else if (clickedPiece) {
+      // Check if it's the current player's piece
+      const isCurrentPlayersPiece = (clickedPiece.charAt(0) === 'w' && currentPlayer === 'white') || 
+                                  (clickedPiece.charAt(0) === 'b' && currentPlayer === 'black');
       
-      // Use the state machine's handler
+      // Always send the SELECT_PIECE event - the state machine will handle validation
+      // If it's the opponent's piece, the state machine will set the appropriate error
       handlePieceClick(rowNum, colNum);
       
-      // The valid moves will come from the state machine's context
-      setValidMoves([...possibleMoves]);
+      // Only update valid moves if it's the current player's piece
+      if (isCurrentPlayersPiece) {
+        setValidMoves([...possibleMoves]);
+      }
     }
   };
 
