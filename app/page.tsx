@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from "sonner";
 import { initialBoard } from '../lib/chessMachine';
+import { PieceType } from '../lib/chessTypes'; // Corrected import for PieceType
 import { useChessMachine } from '../lib/useChessMachine';
 
 export default function Home() {
@@ -20,6 +21,8 @@ export default function Home() {
   // const isStalemate = state.context?.isStalemate || false; // Commented out as unused
   const gameOver = state.context?.gameOver || false;
   const winner = state.context?.winner || null;
+  const awaitingPromotionChoice = state.context?.awaitingPromotionChoice || null;
+  const enPassantTarget = state.context?.enPassantTarget || null; // Added for isKingInCheck calls
 
   // Show toast when error changes
   useEffect(() => {
@@ -35,7 +38,7 @@ export default function Home() {
     // Import the check detection and necessary helper functions
     import('../lib/chessMachine').then(({ isKingInCheck, findKingPosition }) => {
       // First check if the current player is in check
-      const isCurrentlyInCheck = isKingInCheck(board, currentPlayer, state.context.castlingRights);
+      const isCurrentlyInCheck = isKingInCheck(board, currentPlayer, enPassantTarget, state.context.castlingRights);
       
       // If there's a mismatch between actual check status and state
       if (isCurrentlyInCheck !== isCheck) {
@@ -65,7 +68,7 @@ export default function Home() {
       
       // Check the opponent as well, since they might be in check after the move
       const opponent = currentPlayer === 'white' ? 'black' : 'white';
-      const isOpponentInCheck = isKingInCheck(board, opponent, state.context.castlingRights);
+      const isOpponentInCheck = isKingInCheck(board, opponent, enPassantTarget, state.context.castlingRights);
       
       if (isOpponentInCheck) {
         console.log(`Opponent (${opponent}) is in check!`);
@@ -81,7 +84,7 @@ export default function Home() {
     
     // REMOVED: Clean up the interval
     // return () => clearInterval(checkInterval);
-  }, [board, currentPlayer, isCheck, send, state.context.castlingRights]);
+  }, [board, currentPlayer, isCheck, send, state.context.castlingRights, enPassantTarget]); // Added enPassantTarget to dependency array
   
   // Handlers for chess actions
   const handlePieceClick = (row: number, col: number) => {
@@ -91,6 +94,12 @@ export default function Home() {
     
     if (isNaN(rowNum) || isNaN(colNum)) {
       console.error('Invalid position values in handlePieceClick:', { row, col });
+      return;
+    }
+
+    // If awaiting promotion choice, disable piece selection
+    if (awaitingPromotionChoice) {
+      toast.info("Please choose a piece for pawn promotion.");
       return;
     }
     
@@ -135,6 +144,12 @@ export default function Home() {
   const handleCellClick = (row: number, col: number) => {
     // Prevent interactions when the game is over
     if (gameOver) {
+      return;
+    }
+
+    // If awaiting promotion choice, disable cell clicks other than promotion choice UI (handled separately)
+    if (awaitingPromotionChoice) {
+      toast.info("Please choose a piece for pawn promotion.");
       return;
     }
     
@@ -244,6 +259,12 @@ export default function Home() {
       console.error('Invalid position values in handleMovePiece:', { row, col });
       return;
     }
+
+    // If awaiting promotion choice, disable moves
+    if (awaitingPromotionChoice) {
+      toast.info("Please choose a piece for pawn promotion.");
+      return;
+    }
     
     // Debug the values being sent
     console.log('Sending MOVE_PIECE event with position:', { row: rowNum, col: colNum });
@@ -278,6 +299,10 @@ export default function Home() {
 
   const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
   const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+
+  const handlePromotionChoice = (piece: PieceType) => {
+    send({ type: 'CHOOSE_PROMOTION_PIECE', piece });
+  };
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-900">
@@ -442,6 +467,27 @@ export default function Home() {
             >
               Play Again
             </button>
+          </div>
+        )}
+
+        {/* Pawn Promotion Choice Modal */}
+        {awaitingPromotionChoice && (
+          <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-30 rounded-lg">
+            <div className="bg-gray-800 p-8 rounded-lg shadow-xl text-white">
+              <h3 className="text-xl font-semibold mb-6 text-center">Choose Promotion Piece</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {[PieceType.Queen, PieceType.Rook, PieceType.Bishop, PieceType.Knight].map((piece) => (
+                  <button
+                    key={piece}
+                    onClick={() => handlePromotionChoice(piece)}
+                    className="p-4 bg-blue-600 hover:bg-blue-700 rounded-md text-2xl font-bold transition-colors flex flex-col items-center justify-center aspect-square"
+                  >
+                    <span>{getPieceSymbol(currentPlayer === 'white' ? `w${piece}` : `b${piece}`)}</span>
+                    <span className="text-sm mt-1">{piece}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

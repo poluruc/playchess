@@ -4,6 +4,15 @@ export interface Position {
   col: number;
 }
 
+export enum PieceType {
+  Pawn = 'P',
+  Rook = 'R',
+  Knight = 'N',
+  Bishop = 'B',
+  Queen = 'Q',
+  King = 'K',
+}
+
 export interface CastlingRights {
   kingSide: boolean;
   queenSide: boolean;
@@ -25,6 +34,7 @@ export interface ChessContext {
     black: CastlingRights;
   };
   enPassantTarget: Position | null; // Added for en passant
+  awaitingPromotionChoice: Position | null; // Added for pawn promotion UI
 }
 
 // Events in XState v5 format
@@ -33,7 +43,8 @@ export type ChessEvents =
   | { type: 'MOVE_PIECE'; position: Position }
   | { type: 'RESET_GAME' }
   | { type: 'CHECK_BOARD' }
-  | { type: 'CHECK_DETECTION'; isCheck: boolean; message: string };
+  | { type: 'CHECK_DETECTION'; isCheck: boolean; message: string }
+  | { type: 'CHOOSE_PROMOTION_PIECE'; piece: PieceType }; // Added for pawn promotion choice
 
 // Backward compatibility for transition to v5
 export type ChessEvent = ChessEvents;

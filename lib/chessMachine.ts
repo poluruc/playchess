@@ -2,6 +2,9 @@ import { assign, setup } from 'xstate';
 import {
   ChessContext,
   ChessEvents,
+  PieceType // Added PieceType
+  ,
+
   Position
 } from './chessTypes';
 
@@ -10,14 +13,15 @@ export type Player = 'white' | 'black';
 export type Piece = string; // e.g., 'wP', 'bP', 'wK', 'bK'
 export type Board = Piece[][];
 
-export enum PieceType {
-  Pawn = 'P',
-  Rook = 'R',
-  Knight = 'N',
-  Bishop = 'B',
-  Queen = 'Q',
-  King = 'K',
-}
+// PieceType enum is now imported from chessTypes.ts
+// export enum PieceType {
+// Pawn = 'P',
+// Rook = 'R',
+// Knight = 'N',
+// Bishop = 'B',
+// Queen = 'Q',
+// King = 'K',
+// }
 
 // Default initial context - ensure this is defined before chessMachine
 const defaultInitialChessContext: ChessContext = {
@@ -44,7 +48,8 @@ const defaultInitialChessContext: ChessContext = {
     white: { kingSide: true, queenSide: true },
     black: { kingSide: true, queenSide: true },
   },
-  enPassantTarget: null, // Added missing property
+  enPassantTarget: null,
+  awaitingPromotionChoice: null, // Added for pawn promotion UI
 };
 
 // Helper function definitions (getPieceAt, getPieceColor, getPieceType, etc.)
@@ -97,8 +102,10 @@ export function isValidMoveInternal(
   player: Player, 
   castlingRights: ChessContext['castlingRights'],
   forAttackCheck: boolean = false, 
-  enPassantTarget: Position | null = null
+  enPassantTarget: Position | null = null,
+  awaitingPromotionChoice: Position | null = null // Added to prevent moves during choice
 ): boolean {
+  if (awaitingPromotionChoice) return false; // No moves allowed when awaiting promotion choice
   if (!isPositionOnBoard(from) || !isPositionOnBoard(to)) {
     return false;
   }
@@ -255,6 +262,11 @@ export function isValidMoveInternal(
 
     // Standard 1-square king move
     if (rowDiff <= 1 && colDiff <= 1 && (rowDiff + colDiff > 0)) {
+      // Check if the move would put the king into check (already handled by the caller, but good for direct calls)
+      // const tempBoard = createBoardWithMove(board, from, to, getPieceAt(board, from)!);
+      // if (isKingInCheck(tempBoard, player, enPassantTarget, castlingRights)) { // Pass enPassantTarget
+      // return false;
+      // }
       return true; 
     }
 
@@ -329,6 +341,7 @@ function isPositionUnderAttack(
   attackerColor: Player, // Changed PlayerColor to Player
   enPassantTarget: Position | null, 
   castlingRights: ChessContext['castlingRights'] // Changed CastlingRights to ChessContext['castlingRights']
+  // awaitingPromotionChoice is not needed here as this checks attacks, not validates moves
 ): boolean {
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
@@ -351,7 +364,7 @@ function isPositionUnderAttack(
             if (rowDiff <= 1 && colDiff <= 1 && (rowDiff + colDiff > 0)) {
                 return true;
             }
-        } else if (isValidMoveInternal(board, piecePos, targetPosition, attackerColor, castlingRights, true, enPassantTarget)) {
+        } else if (isValidMoveInternal(board, piecePos, targetPosition, attackerColor, castlingRights, true, enPassantTarget, null)) { // Pass null for awaitingPromotionChoice
           return true;
         }
       }
@@ -378,6 +391,7 @@ export function isKingInCheck(
   playerColor: Player, // Changed PlayerColor to Player for consistency
   enPassantTarget: Position | null,
   castlingRights: ChessContext['castlingRights'] // Changed CastlingRights to ChessContext['castlingRights']
+  // awaitingPromotionChoice is not needed here
 ): boolean {
   const kingPosition = findKingPosition(board, playerColor);
   if (!kingPosition) {
@@ -393,8 +407,11 @@ export function getPossibleMoves(
   piecePosition: Position,
   player: Player, // The current player
   castlingRights: ChessContext['castlingRights'],
-  enPassantTarget: Position | null
+  enPassantTarget: Position | null,
+  awaitingPromotionChoice: Position | null // Added
 ): Position[] {
+  if (awaitingPromotionChoice) return []; // No moves if awaiting choice
+
   const piece = getPieceAt(board, piecePosition);
   if (!piece || getPieceColor(piece) !== player) {
     return [];
@@ -406,7 +423,7 @@ export function getPossibleMoves(
     for (let c = 0; c < 8; c++) {
       const targetPosition = { row: r, col: c };
       // Corrected call: relying on default for forAttackCheck (false)
-      if (isValidMoveInternal(board, piecePosition, targetPosition, player, castlingRights, false, enPassantTarget)) {
+      if (isValidMoveInternal(board, piecePosition, targetPosition, player, castlingRights, false, enPassantTarget, awaitingPromotionChoice)) {
         possibleMoves.push(targetPosition);
       }
     }
@@ -418,7 +435,8 @@ function getGameStatus(
   board: Board,
   currentPlayer: Player,
   castlingRights: ChessContext['castlingRights'],
-  enPassantTarget: Position | null // Added enPassantTarget
+  enPassantTarget: Position | null, // Added enPassantTarget
+  awaitingPromotionChoice: Position | null // Added
 ): {
   isCheck: boolean;
   isCheckmate: boolean;
@@ -436,7 +454,7 @@ function getGameStatus(
       const piece = getPieceAt(board, piecePosition);
       if (piece && getPieceColor(piece) === currentPlayer) {
         // Pass enPassantTarget when checking for general legal moves
-        const possibleMoves = getPossibleMoves(board, piecePosition, currentPlayer, castlingRights, enPassantTarget); // Pass enPassantTarget
+        const possibleMoves = getPossibleMoves(board, piecePosition, currentPlayer, castlingRights, enPassantTarget, awaitingPromotionChoice); // Pass awaitingPromotionChoice
         for (const move of possibleMoves) {
             // Simulate the move
             const tempBoard = createBoardWithMove(board, piecePosition, move, piece);
@@ -475,6 +493,11 @@ export const chessMachine = setup({
       const { position } = event;
       const piece = getPieceAt(context.board, position); // Get piece to check its color
 
+      // If awaiting promotion choice, no piece selection allowed
+      if (context.awaitingPromotionChoice) {
+        return { error: "Choose a promotion piece first." };
+      }
+
       // Deselect if clicking the same piece
       if (context.selectedPiece && context.selectedPiece.row === position.row && context.selectedPiece.col === position.col) {
         return { selectedPiece: null, possibleMoves: [], error: null };
@@ -489,7 +512,7 @@ export const chessMachine = setup({
         };
       }
       
-      const possibleMoves = getPossibleMoves(context.board, position, context.currentPlayer, context.castlingRights, context.enPassantTarget);
+      const possibleMoves = getPossibleMoves(context.board, position, context.currentPlayer, context.castlingRights, context.enPassantTarget, context.awaitingPromotionChoice);
       return { selectedPiece: position, possibleMoves, error: null };
     }),
     movePiece: assign(({ context, event }) => {
@@ -502,10 +525,13 @@ export const chessMachine = setup({
         return { error: "Internal error: No piece to move." };
       }
       
-      let newBoard = context.board.map(row => [...row]); // Deep copy for modification
+      const newBoard = context.board.map(row => [...row]); // Changed let to const
       const startPos = context.selectedPiece;
       const player = context.currentPlayer;
       const pieceTypeMoved = getPieceType(pieceToMove);
+      // let nextPlayerTurn = player === 'white' ? 'black' : 'white'; // Removed unused variable
+      let promotionPending = false;
+      let newAwaitingPromotionChoice: Position | null = null;
 
       // Standard piece move (will be overwritten for castling below if applicable)
       newBoard[targetPosition.row][targetPosition.col] = pieceToMove;
@@ -538,10 +564,15 @@ export const chessMachine = setup({
         // Pawn Promotion Logic
         const promotionRank = player === 'white' ? 0 : 7;
         if (targetPosition.row === promotionRank) {
-          newBoard[targetPosition.row][targetPosition.col] = player === 'white' ? 'wQ' : 'bQ'; // Promote to Queen
+          // Instead of auto-promoting, set awaitingPromotionChoice
+          // The actual piece change will happen on CHOOSE_PROMOTION_PIECE event
+          promotionPending = true;
+          newAwaitingPromotionChoice = { ...targetPosition };
+          // Don't change the piece on the board yet.
+          // newBoard[targetPosition.row][targetPosition.col] = player === 'white' ? 'wQ' : 'bQ'; // Promote to Queen
         }
       } else {
-        // If any other piece moved, or if it was a pawn move that wasn\'t a 2-square advance,
+        // If any other piece moved, or if it was a pawn move that wasn\\'t a 2-square advance,
         // the en passant target from the previous turn is no longer valid.
         // This is handled by newEnPassantTarget being initialized to null and only set for 2-square pawn moves.
       }
@@ -615,26 +646,59 @@ export const chessMachine = setup({
       }
 
       const opponent: Player = player === 'white' ? 'black' : 'white';
-      const gameStatus = getGameStatus(newBoard, opponent, newCastlingRights, newEnPassantTarget);
+      // Game status should be calculated based on the board *after* the move,
+      // but *before* promotion choice if one is pending.
+      // If promotion is pending, the turn doesn't switch yet.
+      const gameStatusPlayerForNextTurn = promotionPending ? player : opponent;
+      const gameStatus = getGameStatus(newBoard, gameStatusPlayerForNextTurn, newCastlingRights, newEnPassantTarget, newAwaitingPromotionChoice);
 
       return {
         board: newBoard,
-        currentPlayer: opponent,
+        currentPlayer: promotionPending ? player : opponent, // Player doesn't change if promotion is pending
         selectedPiece: null,
         possibleMoves: [],
         error: null,
         castlingRights: newCastlingRights,
         enPassantTarget: newEnPassantTarget, 
+        awaitingPromotionChoice: newAwaitingPromotionChoice, // Set this
         isCheck: gameStatus.isCheck, 
         isCheckmate: gameStatus.isCheckmate,
         isStalemate: gameStatus.isStalemate,
-        gameOver: gameStatus.isCheckmate || gameStatus.isStalemate,
-        winner: gameStatus.isCheckmate ? player : null,
+        gameOver: gameStatus.isCheckmate || gameStatus.isStalemate, // Game over only if checkmate/stalemate, not just promotion
+        winner: gameStatus.isCheckmate ? player : null, // Winner is the current player if they checkmated
       };
     }),
     resetGameToInitial: assign(() => {
       // Deep clone the defaultInitialChessContext when the action is executed
       return JSON.parse(JSON.stringify(defaultInitialChessContext));
+    }),
+    promotePawn: assign(({ context, event }) => {
+      if (event.type !== 'CHOOSE_PROMOTION_PIECE' || !context.awaitingPromotionChoice) {
+        return { error: "Cannot promote pawn at this time." };
+      }
+      const { piece: chosenPieceType } = event;
+      const promotionPos = context.awaitingPromotionChoice;
+      const player = context.currentPlayer;
+
+      const newBoard = context.board.map(row => [...row]);
+      const promotedPiece: Piece = (player === 'white' ? 'w' : 'b') + chosenPieceType;
+      newBoard[promotionPos.row][promotionPos.col] = promotedPiece;
+
+      // After promotion, determine game status for the opponent
+      const opponent: Player = player === 'white' ? 'black' : 'white';
+      const gameStatus = getGameStatus(newBoard, opponent, context.castlingRights, null /* enPassantTarget is cleared after a move */, null /* promotion choice is done */);
+      
+      return {
+        board: newBoard,
+        awaitingPromotionChoice: null, // Clear the pending choice
+        currentPlayer: opponent, // Switch to opponent
+        isCheck: gameStatus.isCheck,
+        isCheckmate: gameStatus.isCheckmate,
+        isStalemate: gameStatus.isStalemate,
+        gameOver: gameStatus.isCheckmate || gameStatus.isStalemate,
+        winner: gameStatus.isCheckmate ? player : null, // If this promotion resulted in checkmate
+        error: null,
+      };
     })
   },
   guards: {
@@ -648,6 +712,9 @@ export const chessMachine = setup({
       // const piece = getPieceAt(context.board, context.selectedPiece); // Not needed for the call
       // if (!piece) return false; // Not needed
 
+      // Prevent moves if awaiting promotion choice
+      if (context.awaitingPromotionChoice) return false;
+
       // Corrected arguments for isValidMoveInternal:
       // board, from, to, player, castlingRights, forAttackCheck (false for a move), enPassantTarget
       return isValidMoveInternal(
@@ -657,7 +724,8 @@ export const chessMachine = setup({
         context.currentPlayer,    // player (whose turn it is)
         context.castlingRights,   // castlingRights
         false,                    // forAttackCheck (it's a move, not just an attack check)
-        context.enPassantTarget   // enPassantTarget from current context (before this move)
+        context.enPassantTarget,   // enPassantTarget from current context (before this move)
+        context.awaitingPromotionChoice // Pass this through
       );
     },
     isValidMoveGuard: ({ context, event }) => {
@@ -677,10 +745,13 @@ export const chessMachine = setup({
           return false; 
       }
       // Assuming event.from and event.to are correctly populated if this guard is used by a specific event
-      return isValidMoveInternal(context.board, (event as any).from, (event as any).to, context.currentPlayer, context.castlingRights, false, context.enPassantTarget);
+      // Type assertion to satisfy ESLint instead of 'as any'
+      const specificEvent = event as ChessEvents & { from: Position; to: Position };
+      return isValidMoveInternal(context.board, specificEvent.from, specificEvent.to, context.currentPlayer, context.castlingRights, false, context.enPassantTarget, context.awaitingPromotionChoice);
     },
     canSelectPieceGuard: ({ context, event }) => {
       if (event.type !== 'SELECT_PIECE') return false;
+      if (context.awaitingPromotionChoice) return false; // Cannot select if awaiting promotion
       const piece = getPieceAt(context.board, event.position);
       if (!piece) return false;
       return getPieceColor(piece) === context.currentPlayer;
@@ -744,21 +815,52 @@ export const chessMachine = setup({
             ],
             MOVE_PIECE: [
               {
-                target: 'awaitingSelection', // Corrected: Target sibling state
+                target: 'awaitingPromotionChoice', // Transition to awaitingPromotionChoice if move results in promotion
                 actions: ['movePiece'],
-                guard: 'isValidMoveTarget',
+                guard: ({ context, event }) => {
+                  if (event.type !== 'MOVE_PIECE' || !context.selectedPiece) return false;
+                  if (!isValidMoveInternal(context.board, context.selectedPiece, event.position, context.currentPlayer, context.castlingRights, false, context.enPassantTarget, context.awaitingPromotionChoice)) return false;
+                  
+                  const pieceToMove = getPieceAt(context.board, context.selectedPiece);
+                  if (!pieceToMove || getPieceType(pieceToMove) !== PieceType.Pawn) return false;
+                  
+                  const promotionRank = context.currentPlayer === 'white' ? 0 : 7;
+                  return event.position.row === promotionRank;
+                },
               },
               {
-                target: 'awaitingSelection', // Corrected: Target sibling state on invalid move
+                target: 'awaitingSelection', 
+                actions: ['movePiece'],
+                guard: 'isValidMoveTarget', // Standard move
+              },
+              {
+                target: 'awaitingSelection', 
                 actions: assign({ error: "That move is not allowed!" }),
               }
             ],
             RESET_GAME: {
-              target: 'awaitingSelection', // Corrected: Target sibling state
+              target: 'awaitingSelection', 
               actions: 'resetGameToInitial',
             },
           },
         },
+        awaitingPromotionChoice: { // New state for handling promotion choice
+          on: {
+            CHOOSE_PROMOTION_PIECE: {
+              target: 'awaitingSelection',
+              actions: 'promotePawn',
+              // Add a guard here if needed, e.g., to validate the chosen piece type
+            },
+            // Potentially handle RESET_GAME here as well
+            RESET_GAME: {
+              target: 'awaitingSelection',
+              actions: 'resetGameToInitial',
+            },
+            // Ignore SELECT_PIECE and MOVE_PIECE while in this state, or handle with an error
+            SELECT_PIECE: { actions: assign({ error: "Choose a promotion piece." }) },
+            MOVE_PIECE: { actions: assign({ error: "Choose a promotion piece." }) },
+          }
+        }
       },
     },
   },

@@ -1,4 +1,5 @@
 import { FlatCompat } from "@eslint/eslintrc";
+import tsEslintPlugin from "@typescript-eslint/eslint-plugin";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -21,7 +22,7 @@ const eslintConfig = [
       },
     },
     plugins: {
-      "@typescript-eslint": require("@typescript-eslint/eslint-plugin"),
+      "@typescript-eslint": tsEslintPlugin,
     },
     rules: {},
   },
