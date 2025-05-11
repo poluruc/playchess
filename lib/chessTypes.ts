@@ -24,6 +24,7 @@ export interface ChessContext {
     white: CastlingRights;
     black: CastlingRights;
   };
+  enPassantTarget: Position | null; // Added for en passant
 }
 
 // Events in XState v5 format

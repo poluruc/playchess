@@ -30,8 +30,8 @@ export function useChessMachine() {
       if (snapshot.context?.board && snapshot.context?.currentPlayer) {
         import('./chessMachine').then(({ isKingInCheck }) => {
           // Check both white and black king status
-          const whiteInCheck = isKingInCheck(snapshot.context.board, 'white');
-          const blackInCheck = isKingInCheck(snapshot.context.board, 'black');
+          const whiteInCheck = isKingInCheck(snapshot.context.board, 'white', snapshot.context.castlingRights);
+          const blackInCheck = isKingInCheck(snapshot.context.board, 'black', snapshot.context.castlingRights);
           const currentPlayer = snapshot.context.currentPlayer;
           const currentCheck = currentPlayer === 'white' ? whiteInCheck : blackInCheck;
           

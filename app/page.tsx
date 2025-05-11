@@ -12,11 +12,12 @@ export default function Home() {
   const board = state.context?.board || initialBoard;
   const currentPlayer = state.context?.currentPlayer || 'white';
   const selectedPiece = state.context?.selectedPiece || null;
-  const possibleMoves = state.context?.possibleMoves || [];
+  // Wrap possibleMoves in useMemo
+  const possibleMoves = useMemo(() => state.context?.possibleMoves || [], [state.context?.possibleMoves]);
   const error = state.context?.error;
   const isCheck = state.context?.isCheck || false;
   const isCheckmate = state.context?.isCheckmate || false;
-  const isStalemate = state.context?.isStalemate || false;
+  // const isStalemate = state.context?.isStalemate || false; // Commented out as unused
   const gameOver = state.context?.gameOver || false;
   const winner = state.context?.winner || null;
 
@@ -32,9 +33,9 @@ export default function Home() {
   // Enhanced check detection when board changes
   useEffect(() => {
     // Import the check detection and necessary helper functions
-    import('../lib/chessMachine').then(({ isKingInCheck, findKingPosition, wouldMoveResultInCheck }) => {
+    import('../lib/chessMachine').then(({ isKingInCheck, findKingPosition }) => {
       // First check if the current player is in check
-      const isCurrentlyInCheck = isKingInCheck(board, currentPlayer);
+      const isCurrentlyInCheck = isKingInCheck(board, currentPlayer, state.context.castlingRights);
       
       // If there's a mismatch between actual check status and state
       if (isCurrentlyInCheck !== isCheck) {
@@ -64,7 +65,7 @@ export default function Home() {
       
       // Check the opponent as well, since they might be in check after the move
       const opponent = currentPlayer === 'white' ? 'black' : 'white';
-      const isOpponentInCheck = isKingInCheck(board, opponent);
+      const isOpponentInCheck = isKingInCheck(board, opponent, state.context.castlingRights);
       
       if (isOpponentInCheck) {
         console.log(`Opponent (${opponent}) is in check!`);
@@ -80,7 +81,7 @@ export default function Home() {
     
     // REMOVED: Clean up the interval
     // return () => clearInterval(checkInterval);
-  }, [board, currentPlayer, isCheck, send]);
+  }, [board, currentPlayer, isCheck, send, state.context.castlingRights]);
   
   // Handlers for chess actions
   const handlePieceClick = (row: number, col: number) => {
@@ -336,6 +337,7 @@ export default function Home() {
                   return (
                     <div 
                       key={`${rowIndex}-${colIndex}`} 
+                      data-testid={`cell-${rowIndex}-${colIndex}`} // Added data-testid
                       className={`
                         ${cellClass} 
                         flex items-center justify-center 
@@ -427,7 +429,7 @@ export default function Home() {
         
         {/* Game Over Overlay */}
         {gameOver && (
-          <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-20 rounded-lg">
+          <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-20 rounded-lg opacity-80">
             <div className="text-3xl font-bold text-white mb-4">
               {isCheckmate ? 
                 `${winner === 'white' ? 'White' : 'Black'} wins by checkmate!` : 
@@ -436,7 +438,7 @@ export default function Home() {
             </div>
             <button 
               onClick={resetGame}
-              className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg text-lg"
+              className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-colors font-medium shadow-lg text-lg opacity-100"
             >
               Play Again
             </button>

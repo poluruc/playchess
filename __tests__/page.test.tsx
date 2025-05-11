@@ -41,9 +41,8 @@ describe('Home', () => {
   it('calls send with SELECT_PIECE when a piece is clicked', () => {
     render(<Home />);
     
-    // Find a chess piece (white pawn) and click it
-    const cells = document.querySelectorAll('[class*="flex items-center justify-center"]');
-    const whitePawnCell = cells[6 * 8 + 0]; // Row 6, Col 0
+    // Find a chess piece (white pawn at 6,0) by its data-testid and click it
+    const whitePawnCell = screen.getByTestId('cell-6-0');
     
     fireEvent.click(whitePawnCell);
     
