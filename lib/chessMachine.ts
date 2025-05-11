@@ -138,7 +138,6 @@ export function isValidMoveInternal(
     if (Math.abs(targetCol - startCol) === 1 && targetRow === startRow + direction) {
         if (forAttackCheck) {
             // For attack checks, a pawn simply attacks the two squares diagonally in front of it.
-            // The 'player' variable here is the color of the pawn.
             return true;
         }
         // This is a diagonal move, so for a regular move, it must be a capture or en-passant.
@@ -150,8 +149,8 @@ export function isValidMoveInternal(
             }
             return true; // Standard capture
         }
-        // En Passant Capture
-        if (enPassantTarget && targetRow === enPassantTarget.row && targetCol === enPassantTarget.col) {
+        // En Passant Capture (not an attack check, must be a specific move)
+        if (!forAttackCheck && enPassantTarget && targetRow === enPassantTarget.row && targetCol === enPassantTarget.col) {
             // The capturing pawn must be on its 5th rank.
             // For white (moves from row 6 to 0): 5th rank is row 3 (0-indexed).
             // For black (moves from row 1 to 7): 5th rank is row 4 (0-indexed).
@@ -513,19 +512,38 @@ export const chessMachine = setup({
       newBoard[startPos.row][startPos.col] = '';
 
       const newCastlingRights = JSON.parse(JSON.stringify(context.castlingRights)) as ChessContext['castlingRights'];
-      let newEnPassantTarget: Position | null = null;
+      let newEnPassantTarget: Position | null = null; // Default to null, will be set if applicable
 
       if (pieceTypeMoved === PieceType.Pawn) {
         const movedRows = Math.abs(targetPosition.row - startPos.row);
+        // Set new enPassantTarget if pawn moved two squares
         if (movedRows === 2) {
           newEnPassantTarget = { row: (startPos.row + targetPosition.row) / 2, col: startPos.col };
+        } else {
+          // If it's not a two-square pawn move, clear any existing enPassantTarget from previous turn.
+          // This is implicitly handled by newEnPassantTarget being null by default unless set by a 2-square move.
         }
+
+        // Handle en passant capture: remove the captured pawn
         if (context.enPassantTarget &&
             targetPosition.row === context.enPassantTarget.row &&
-            targetPosition.col === context.enPassantTarget.col) {
+            targetPosition.col === context.enPassantTarget.col &&
+            movedRows === 1 && // Must be a single diagonal step to the en passant target square
+            Math.abs(targetPosition.col - startPos.col) === 1) { // Must be a diagonal move
             const capturedPawnRow = player === 'white' ? targetPosition.row + 1 : targetPosition.row - 1;
             newBoard[capturedPawnRow][targetPosition.col] = ''; // Remove en passanted pawn
+            // newEnPassantTarget remains null as an en passant capture does not create a new en passant opportunity
         }
+
+        // Pawn Promotion Logic
+        const promotionRank = player === 'white' ? 0 : 7;
+        if (targetPosition.row === promotionRank) {
+          newBoard[targetPosition.row][targetPosition.col] = player === 'white' ? 'wQ' : 'bQ'; // Promote to Queen
+        }
+      } else {
+        // If any other piece moved, or if it was a pawn move that wasn\'t a 2-square advance,
+        // the en passant target from the previous turn is no longer valid.
+        // This is handled by newEnPassantTarget being initialized to null and only set for 2-square pawn moves.
       }
 
       if (pieceTypeMoved === PieceType.King) {

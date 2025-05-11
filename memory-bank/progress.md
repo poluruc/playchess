@@ -16,6 +16,10 @@
 ✅ **Synchronized Test & App Logic** - Test helpers and application code now use the same chess rule logic.
 ✅ **XState v5 Machine Structure** - Core state machine (`chessMachine.ts`) correctly structured using XState v5 `setup` and `createMachine`.
 ✅ **`initialBoard` Export** - The `initialBoard` constant is now correctly exported from `lib/chessMachine.ts`, resolving build issues in `app/page.tsx`.
+✅ **Stalemate detection** ✓
+✅ **Castling** - Implemented and tested (validation, execution, rights updates).
+✅ **XState v5 Migration** - State machine fully migrated to XState v5, including updated test suite and finalized edge cases.
+✅ **En passant** ✓ (Implementation and testing complete)
 
 ## In Progress
 🔄 **Complete Chess Rules** - Adding all chess rules
@@ -24,21 +28,12 @@
   - Checkmate detection ✓
   - Stalemate detection ✓
   - Special moves:
-    - **Castling** (Core logic implemented in `chessMachine.ts`: validation, execution, rights updates. Comprehensive testing is the current priority.)
-    - En passant (planned)
-    - Pawn promotion (planned)
-🔄 **XState v5 Migration** - Updating state machine from XState v4 to v5
-  - Core functionality migrated ✓
-  - Test suite updated (ongoing for new features like castling)
-  - Finalizing edge cases (ongoing)
+    - Castling ✓
+    - En passant ✓
+    - Pawn promotion ✓ (Automatic promotion to Queen implemented and tested)
 
-## What\'s Next
-📋 **Test Castling Functionality** - Write comprehensive unit tests for all aspects of castling. This is the immediate next step.
-📋 **Verify Original Check Detection Issue** - Confirm the previously noted check detection anomaly is resolved.
-📋 **Stalemate Detection** - Implement and test stalemate conditions thoroughly.
-📋 **Special Chess Moves (Continued)** - Implement and test:
-   - En passant captures
-   - Pawn promotion
+## What's Next
+📋 **Pawn Promotion UI** - Allow user to choose promotion piece (Queen, Rook, Bishop, Knight).
 📋 **Game History** - Recording and playing back move history
 📋 **Time Controls** - Adding chess clock functionality
 📋 **Game Analysis** - Position evaluation and analysis tools
