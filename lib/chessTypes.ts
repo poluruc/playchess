@@ -1,3 +1,8 @@
+// filepath: /Users/poluruc/chandra/work/cline/mychess/lib/chessTypes.ts
+export type Player = 'white' | 'black';
+export type Piece = string; // Represents piece notation like 'wP', 'bK', or '' for empty
+export type Board = Piece[][];
+
 // Define types for the chess game using XState v5 conventions
 export interface Position {
   row: number;
@@ -11,6 +16,21 @@ export enum PieceType {
   Bishop = 'B',
   Queen = 'Q',
   King = 'K',
+}
+
+export interface MoveRecord {
+  from: Position;
+  to: Position;
+  piece: string; // e.g., 'wP', 'bK'
+  notation: string; // e.g., 'e4', 'Nf3', 'O-O'
+  boardBefore: string[][];
+  boardAfter: string[][];
+  isCheck: boolean;
+  isCheckmate: boolean;
+  isStalemate: boolean;
+  castlingRightsBefore: ChessContext['castlingRights'];
+  enPassantTargetBefore: Position | null;
+  // Add other relevant state if needed, like player, etc.
 }
 
 export interface CastlingRights {
@@ -35,6 +55,7 @@ export interface ChessContext {
   };
   enPassantTarget: Position | null; // Added for en passant
   awaitingPromotionChoice: Position | null; // Added for pawn promotion UI
+  moveHistory: MoveRecord[]; // Added for game history
 }
 
 // Events in XState v5 format

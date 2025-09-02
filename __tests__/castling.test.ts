@@ -1,5 +1,5 @@
 // Use the helper from testHelpers.ts which correctly sets up the machine
-import { createCustomBoard, createTestActor } from './helpers/testHelpers';
+import { createTestActor } from './helpers/testHelpers';
 
 // Functions like isKingInCheck, getPossibleMoves etc. are part of the machine's internal logic 
 // or context updates, so direct import might not be needed if tests rely on actor state.
@@ -9,11 +9,11 @@ import { createCustomBoard, createTestActor } from './helpers/testHelpers';
 describe('Chess Machine - Castling Logic', () => {
   // Test 1: White King-side Castling
   test('should allow white king-side castling when conditions are met', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' },
       { pos: { row: 7, col: 7 }, piece: 'wR' },
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } }); // Select King
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 6 } });   // Move to g1
@@ -30,11 +30,11 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 2: White Queen-side Castling
   test('should allow white queen-side castling when conditions are met', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' },
       { pos: { row: 7, col: 0 }, piece: 'wR' },
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } }); // Select King
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 2 } });   // Move to c1
@@ -51,11 +51,11 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 3: Black King-side Castling
   test('should allow black king-side castling when conditions are met', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 0, col: 4 }, piece: 'bK' },
       { pos: { row: 0, col: 7 }, piece: 'bR' },
-    ]);
-    const actor = createTestActor(board, 'black');
+    ];
+    const actor = createTestActor(pieceSetups, 'black'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 0, col: 4 } }); // Select King
     actor.send({ type: 'MOVE_PIECE', position: { row: 0, col: 6 } });   // Move to g8
@@ -72,11 +72,11 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 4: Black Queen-side Castling
   test('should allow black queen-side castling when conditions are met', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 0, col: 4 }, piece: 'bK' },
       { pos: { row: 0, col: 0 }, piece: 'bR' },
-    ]);
-    const actor = createTestActor(board, 'black');
+    ];
+    const actor = createTestActor(pieceSetups, 'black'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 0, col: 4 } }); // Select King
     actor.send({ type: 'MOVE_PIECE', position: { row: 0, col: 2 } });   // Move to c8
@@ -93,13 +93,13 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 5: Prevent castling if King has moved
   test('should prevent white king-side castling if king has moved from its starting square', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' }, 
       { pos: { row: 7, col: 7 }, piece: 'wR' },
       { pos: { row: 1, col: 0 }, piece: 'bP' }, // Add a black pawn for turn passing
-    ]);
+    ];
     // Create actor with castling rights initially true, but the machine should revoke them after king moves.
-    const actor = createTestActor(board, 'white', {
+    const actor = createTestActor(pieceSetups, 'white', { // Pass pieceSetups directly
       white: { kingSide: true, queenSide: true }, 
       black: { kingSide: true, queenSide: true },
     });
@@ -132,12 +132,12 @@ describe('Chess Machine - Castling Logic', () => {
   
   // Test 6: Prevent castling if Rook has moved
   test('should prevent white king-side castling if rook has moved from its starting square', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' },
       { pos: { row: 7, col: 7 }, piece: 'wR' }, 
       { pos: { row: 1, col: 0 }, piece: 'bP' }, // Add a black pawn for turn passing
-    ]);
-    const actor = createTestActor(board, 'white', {
+    ];
+    const actor = createTestActor(pieceSetups, 'white', { // Pass pieceSetups directly
       white: { kingSide: true, queenSide: true },
       black: { kingSide: true, queenSide: true },
     });
@@ -170,12 +170,12 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 7: Prevent castling if pieces are between King and Rook (White King-side)
   test('should prevent white king-side castling if pieces are between king and rook', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' },
       { pos: { row: 7, col: 5 }, piece: 'wB' }, // Bishop on f1
       { pos: { row: 7, col: 7 }, piece: 'wR' },
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } });
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 6 } });
@@ -189,12 +189,12 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 8: Prevent castling if King is in check (White King-side)
   test('should prevent white king-side castling if king is in check', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' },
       { pos: { row: 7, col: 7 }, piece: 'wR' },
       { pos: { row: 0, col: 4 }, piece: 'bR' }, // Black rook on e8, checking white king on e1
-    ]);
-    const actor = createTestActor(board, 'white'); // isCheck should be auto-detected by createTestActor
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } });
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 6 } });
@@ -208,12 +208,12 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 9: Prevent castling if King passes through an attacked square (White King-side)
   test('should prevent white king-side castling if king passes through an attacked square', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' }, // e1
       { pos: { row: 7, col: 7 }, piece: 'wR' }, // h1
       { pos: { row: 0, col: 5 }, piece: 'bR' }, // Black rook on f8, attacking f1 (7,5)
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } });
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 6 } }); // Attempt to castle, king passes f1
@@ -226,12 +226,12 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 10: Prevent castling if King lands on an attacked square (White King-side)
   test('should prevent white king-side castling if king lands on an attacked square', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' }, // e1
       { pos: { row: 7, col: 7 }, piece: 'wR' }, // h1
       { pos: { row: 0, col: 6 }, piece: 'bR' }, // Black rook on g8, attacking g1 (7,6)
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } });
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 6 } }); // Attempt to castle, king lands on g1
@@ -244,12 +244,12 @@ describe('Chess Machine - Castling Logic', () => {
   
   // Test 11: Prevent castling if pieces are between King and Rook (White Queen-side)
   test('should prevent white queen-side castling if pieces are between king and rook', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' },
       { pos: { row: 7, col: 3 }, piece: 'wQ' }, // Queen on d1
       { pos: { row: 7, col: 0 }, piece: 'wR' },
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } });
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 2 } }); // Attempt queen-side castle
@@ -263,12 +263,12 @@ describe('Chess Machine - Castling Logic', () => {
   
   // Test 12: Prevent castling if King passes through d1 (attacked)
   test('should prevent white queen-side castling if king passes through d1 (attacked)', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' }, // e1
       { pos: { row: 7, col: 0 }, piece: 'wR' }, // a1
       { pos: { row: 0, col: 3 }, piece: 'bR' }, // Black rook on d8, attacking d1 (7,3)
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } });
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 2 } }); // Attempt queen-side, king passes d1
@@ -281,12 +281,12 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 13: Prevent castling if King lands on c1 (attacked)
   test('should prevent white queen-side castling if king lands on c1 (attacked)', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' }, // e1
       { pos: { row: 7, col: 0 }, piece: 'wR' }, // a1
       { pos: { row: 0, col: 2 }, piece: 'bR' }, // Black rook on c8, attacking c1 (7,2)
-    ]);
-    const actor = createTestActor(board, 'white');
+    ];
+    const actor = createTestActor(pieceSetups, 'white'); // Pass pieceSetups directly
 
     actor.send({ type: 'SELECT_PIECE', position: { row: 7, col: 4 } });
     actor.send({ type: 'MOVE_PIECE', position: { row: 7, col: 2 } }); // Attempt queen-side, king lands on c1
@@ -299,12 +299,12 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 14: Verify black is in check after white king-side castling
   test('should correctly identify black king in check after white king-side castling', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' }, // e1, White King
       { pos: { row: 7, col: 7 }, piece: 'wR' }, // h1, White Rook for castling
       { pos: { row: 0, col: 5 }, piece: 'bK' }, // f8, Black King
-    ]);
-    const actor = createTestActor(board, 'white', {
+    ];
+    const actor = createTestActor(pieceSetups, 'white', { // Pass pieceSetups directly
       white: { kingSide: true, queenSide: true },
       black: { kingSide: true, queenSide: true }, // Black needs castling rights for this test to be about white's move
     });
@@ -324,7 +324,7 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 15: Verify checkmate after white king-side castling (scenario)
   test('should correctly identify checkmate after white king-side castling', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 7, col: 4 }, piece: 'wK' }, // e1, White King
       { pos: { row: 7, col: 7 }, piece: 'wR' }, // h1, White Rook for castling
       { pos: { row: 0, col: 5 }, piece: 'bK' }, // f8, Black King
@@ -333,8 +333,8 @@ describe('Chess Machine - Castling Logic', () => {
       // Escape squares for bK f8 (0,5): e8(0,4), g8(0,6), e7(1,4), f7(1,5), g7(1,6)
       { pos: { row: 2, col: 4 }, piece: 'wQ' }, // White Queen at e6 (covers e8, g8, e7, f7)
       { pos: { row: 3, col: 7 }, piece: 'wN' }, // White Knight at h5 (covers g7 and e7)
-    ]);
-    const actor = createTestActor(board, 'white', {
+    ];
+    const actor = createTestActor(pieceSetups, 'white', { // Pass pieceSetups directly
         white: { kingSide: true, queenSide: true },
         black: { kingSide: false, queenSide: false },
     });
@@ -355,7 +355,7 @@ describe('Chess Machine - Castling Logic', () => {
 
   // Test 16: Verify stalemate after black queen-side castling (scenario)
   test('should correctly identify stalemate after black queen-side castling', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 0, col: 4 }, piece: 'bK' }, // e8, Black King
       { pos: { row: 0, col: 0 }, piece: 'bR' }, // a8, Black Rook for Q-side castling
       
@@ -364,8 +364,8 @@ describe('Chess Machine - Castling Logic', () => {
       // bQ c2 covers b1, a2, b2 (wK escape squares) and d1, d2, c1.
       { pos: { row: 7, col: 0 }, piece: 'wK' }, // a1, White King
       { pos: { row: 6, col: 2 }, piece: 'bQ' }, // c2, Black Queen
-    ]);
-    const actor = createTestActor(board, 'black', {
+    ];
+    const actor = createTestActor(pieceSetups, 'black', { // Pass pieceSetups directly
         white: { kingSide: false, queenSide: false }, // White cannot castle
         black: { kingSide: true, queenSide: true },   // Black can castle
     });
@@ -394,13 +394,13 @@ describe('Chess Machine - Castling Logic', () => {
 
 describe('Chess Machine - Basic Checkmate/Stalemate Diagnosis', () => {
   test('should correctly identify a simple checkmate (bK a8, wR a7, wR b7, black to play)', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 0, col: 0 }, piece: 'bK' }, // a8, Black King
       { pos: { row: 1, col: 0 }, piece: 'wR' }, // a7, White Rook (checks bK)
       { pos: { row: 1, col: 1 }, piece: 'wR' }, // b7, White Rook (covers bK escape to b8)
-    ]);
+    ];
     const actor = createTestActor(
-      board, 
+      pieceSetups, // Pass pieceSetups directly
       'black', 
       { white: { kingSide: false, queenSide: false }, black: { kingSide: false, queenSide: false } },
       null       
@@ -417,15 +417,15 @@ describe('Chess Machine - Basic Checkmate/Stalemate Diagnosis', () => {
 
 describe('Chess Machine - Direct Checkmate Scenario Test', () => {
   test('should correctly identify checkmate with Rook and Queen (bK h8, wR h1, wQ f7, black to play)', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 0, col: 7 }, piece: 'bK' }, // h8, Black King
       { pos: { row: 7, col: 7 }, piece: 'wR' }, // h1, White Rook (checking bK)
       { pos: { row: 1, col: 5 }, piece: 'wQ' }, // f7, White Queen (covering g8, g7)
-    ]);
+    ];
 
     // It's black's turn, and black is in check.
     const actor = createTestActor(
-      board,
+      pieceSetups, // Pass pieceSetups directly
       'black',
       { white: { kingSide: false, queenSide: false }, black: { kingSide: false, queenSide: false } },
       null
@@ -447,14 +447,14 @@ describe('Chess Machine - Direct Checkmate Scenario Test', () => {
 
 describe('Chess Machine - More Direct Checkmate Scenarios', () => {
   test('should correctly identify checkmate with Rook and Queen (bK h8, wR h1, wQ f7, black to play) - REPEATED', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 0, col: 7 }, piece: 'bK' }, // h8, Black King
       { pos: { row: 7, col: 7 }, piece: 'wR' }, // h1, White Rook (checking bK)
       { pos: { row: 1, col: 5 }, piece: 'wQ' }, // f7, White Queen (covering g8, g7)
-    ]);
+    ];
 
     const actor = createTestActor(
-      board,
+      pieceSetups, // Pass pieceSetups directly
       'black',
       { white: { kingSide: false, queenSide: false }, black: { kingSide: false, queenSide: false } },
       null
@@ -469,13 +469,13 @@ describe('Chess Machine - More Direct Checkmate Scenarios', () => {
   });
 
   test('should correctly identify a simple Queen+Rook checkmate (bK a8, wQ a7, wR b7, black to play)', () => {
-    const board = createCustomBoard([
+    const pieceSetups = [
       { pos: { row: 0, col: 0 }, piece: 'bK' }, // a8
       { pos: { row: 1, col: 0 }, piece: 'wQ' }, // a7 (directly checks and covers a8 escape to a7)
       { pos: { row: 1, col: 1 }, piece: 'wR' }, // b7 (covers a8 escape to b8, and protects wQ if bK tries bKxa7)
-    ]);
+    ];
     const actor = createTestActor(
-      board,
+      pieceSetups, // Pass pieceSetups directly
       'black',
       { white: { kingSide: false, queenSide: false }, black: { kingSide: false, queenSide: false } },
       null

@@ -1,30 +1,16 @@
-import { assign, setup } from 'xstate';
+import { and, assign, setup } from 'xstate';
 import {
+  Board,
   ChessContext,
   ChessEvents,
-  PieceType // Added PieceType
-  ,
-
+  MoveRecord,
+  Piece,
+  PieceType,
+  Player,
   Position
 } from './chessTypes';
 
-// Define or alias types that were previously incorrectly imported
-export type Player = 'white' | 'black';
-export type Piece = string; // e.g., 'wP', 'bP', 'wK', 'bK'
-export type Board = Piece[][];
-
-// PieceType enum is now imported from chessTypes.ts
-// export enum PieceType {
-// Pawn = 'P',
-// Rook = 'R',
-// Knight = 'N',
-// Bishop = 'B',
-// Queen = 'Q',
-// King = 'K',
-// }
-
-// Default initial context - ensure this is defined before chessMachine
-const defaultInitialChessContext: ChessContext = {
+export const defaultInitialChessContext: ChessContext = { // Add export here
   board: [
     ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
     ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
@@ -49,22 +35,19 @@ const defaultInitialChessContext: ChessContext = {
     black: { kingSide: true, queenSide: true },
   },
   enPassantTarget: null,
-  awaitingPromotionChoice: null, // Added for pawn promotion UI
+  awaitingPromotionChoice: null,
+  moveHistory: [],
 };
 
-// Helper function definitions (getPieceAt, getPieceColor, getPieceType, etc.)
-// These were previously assumed to be imported or defined. Now we ensure they are here.
-
-// Helper function to get the piece at a given position
 function getPieceAt(board: Board, position: Position): Piece | null {
   if (!board || !position ||
       position.row < 0 || position.row >= board.length ||
-      !board[position.row] || // Check if the row itself exists
+      !board[position.row] || 
       position.col < 0 || position.col >= board[position.row].length) {
-    return null; // Out of bounds or invalid position
+    return null; 
   }
   const piece = board[position.row][position.col];
-  return piece === '' ? null : piece; // Return null if empty string (no piece), otherwise the piece.
+  return piece === '' ? null : piece; 
 }
 
 function getPieceColor(piece: Piece): Player | null {
@@ -74,27 +57,24 @@ function getPieceColor(piece: Piece): Player | null {
 
 function getPieceType(piece: Piece): PieceType | null {
   if (!piece || piece.length < 2) return null;
-  const typeChar = piece.substring(1).toUpperCase(); // Get char after 'w' or 'b'
-  return typeChar as PieceType; // Assume it's a valid PieceType key
+  const typeChar = piece.substring(1).toUpperCase();
+  if (Object.values(PieceType).includes(typeChar as PieceType)) {
+    return typeChar as PieceType;
+  }
+  return null; 
 }
 
 function createBoardWithMove(board: Board, from: Position, to: Position, piece: Piece): Board {
-  const newBoard = board.map(row => [...row]);
+  const newBoard = board.map((row: Piece[]) => [...row]);
   newBoard[to.row][to.col] = piece;
   newBoard[from.row][from.col] = '';
   return newBoard;
 }
 
-// --- Game Logic Helper Functions ---
-
-// Determines if a position is on the board
 export function isPositionOnBoard(position: Position): boolean {
   return position.row >= 0 && position.row < 8 && position.col >= 0 && position.col < 8;
 }
 
-// Validates a move internally, considering board state, piece type, and rules.
-// player is the color of the piece being moved.
-// forAttackCheck is true if we are only checking if the 'to' square is attacked, not if a full move is valid.
 export function isValidMoveInternal(
   board: Board,
   from: Position,
@@ -103,9 +83,9 @@ export function isValidMoveInternal(
   castlingRights: ChessContext['castlingRights'],
   forAttackCheck: boolean = false, 
   enPassantTarget: Position | null = null,
-  awaitingPromotionChoice: Position | null = null // Added to prevent moves during choice
+  awaitingPromotionChoice: Position | null = null
 ): boolean {
-  if (awaitingPromotionChoice) return false; // No moves allowed when awaiting promotion choice
+  if (awaitingPromotionChoice) return false; 
   if (!isPositionOnBoard(from) || !isPositionOnBoard(to)) {
     return false;
   }
@@ -113,82 +93,58 @@ export function isValidMoveInternal(
   if (!pieceOnFromSquare) {
     return false;
   }
-
-  const pieceOwnerColor = getPieceColor(pieceOnFromSquare); // Actual color of the piece at 'from'
+  const pieceOwnerColor = getPieceColor(pieceOnFromSquare); 
   const pieceType = getPieceType(pieceOnFromSquare);
-
   if (!pieceType || !pieceOwnerColor) {
-    return false; // Should not happen with a valid board
+    return false; 
   }
-
-  // If not an attack check, the piece being moved must belong to the current player.
   if (!forAttackCheck && pieceOwnerColor !== player) {
     return false;
   }
-
   const targetPiece = getPieceAt(board, to);
   const targetPieceColor = targetPiece ? getPieceColor(targetPiece) : null;
-
-  // Cannot capture own piece
   if (targetPieceColor === player) {
     return false;
   }
-
   if (pieceType === PieceType.Pawn) {
-    const direction = player === 'white' ? -1 : 1; // 'player' is the color of the pawn
+    const direction = player === 'white' ? -1 : 1; 
     const startRow = from.row;
     const startCol = from.col;
     const targetRow = to.row;
     const targetCol = to.col;
-
-    // Pawn Attack & Diagonal Movement Logic
     if (Math.abs(targetCol - startCol) === 1 && targetRow === startRow + direction) {
         if (forAttackCheck) {
-            // For attack checks, a pawn simply attacks the two squares diagonally in front of it.
             return true;
         }
-        // This is a diagonal move, so for a regular move, it must be a capture or en-passant.
-        // Standard Capture
         if (targetPiece && targetPieceColor && targetPieceColor !== player) {
-            // Check for promotion on capture
             if (targetRow === (player === 'white' ? 0 : 7)) {
-                return true; // Promotion on capture
+                return true; 
             }
-            return true; // Standard capture
+            return true; 
         }
-        // En Passant Capture (not an attack check, must be a specific move)
         if (!forAttackCheck && enPassantTarget && targetRow === enPassantTarget.row && targetCol === enPassantTarget.col) {
-            // The capturing pawn must be on its 5th rank.
-            // For white (moves from row 6 to 0): 5th rank is row 3 (0-indexed).
-            // For black (moves from row 1 to 7): 5th rank is row 4 (0-indexed).
             const fifthRank = player === 'white' ? 3 : 4;
             if (startRow === fifthRank) {
-                 return true; // En passant capture. Promotion is not possible with en passant.
+                 return true; 
             }
         }
-        return false; // Diagonal move but not a valid capture or en-passant for a regular move.
+        return false; 
     }
-
-    // Pawn Forward Movement Logic (only for regular moves, not forAttackCheck)
-    if (targetCol === startCol && !forAttackCheck) { // Pawns only move straight forward, they don't "attack" straight forward.
-        // Standard one-step forward
-        if (targetRow === startRow + direction && !targetPiece) { // Target square must be empty
-            // Check for promotion on forward move
+    if (targetCol === startCol && !forAttackCheck) { 
+        if (targetRow === startRow + direction && !targetPiece) { 
             if (targetRow === (player === 'white' ? 0 : 7)) {
-                return true; // Promotion on forward move
+                return true; 
             }
-            return true; // Standard one-step forward
+            return true; 
         }
-        // Initial two-step forward
         const initialPawnRow = player === 'white' ? 6 : 1;
         if (startRow === initialPawnRow && targetRow === startRow + 2 * direction && !targetPiece) {
-            // Both target square and intermediate square must be empty
             if (!getPieceAt(board, { row: startRow + direction, col: startCol })) {
-                return true; // Initial two-step forward. Promotion is not possible here.
+                return true; 
             }
         }
     }
-    return false; // Not a valid pawn move if none of the above conditions were met.
+    return false; 
   }
   if (pieceType === PieceType.Rook) {
     if (from.row !== to.row && from.col !== to.col) {
@@ -197,12 +153,12 @@ export function isValidMoveInternal(
     if (from.row === to.row) {
       const step = to.col > from.col ? 1 : -1;
       for (let c = from.col + step; c !== to.col; c += step) {
-        if (getPieceAt(board, {row: from.row, col: c}) !== null) return false; // Obstruction if not null
+        if (getPieceAt(board, {row: from.row, col: c}) !== null) return false; 
       }
     } else {
       const step = to.row > from.row ? 1 : -1;
       for (let r = from.row + step; r !== to.row; r += step) {
-        if (getPieceAt(board, {row: r, col: from.col}) !== null) return false; // Obstruction if not null
+        if (getPieceAt(board, {row: r, col: from.col}) !== null) return false; 
       }
     }
     return true;
@@ -221,7 +177,7 @@ export function isValidMoveInternal(
     let r = from.row + rowStep;
     let c = from.col + colStep;
     while (r !== to.row) {
-      if (getPieceAt(board, {row: r, col: c}) !== null) return false; // Obstruction if not null
+      if (getPieceAt(board, {row: r, col: c}) !== null) return false; 
       r += rowStep;
       c += colStep;
     }
@@ -235,21 +191,21 @@ export function isValidMoveInternal(
       if (from.row === to.row) {
         const step = to.col > from.col ? 1 : -1;
         for (let col = from.col + step; col !== to.col; col += step) {
-          if (getPieceAt(board, {row: from.row, col: col}) !== null) return false; // Obstruction if not null
+          if (getPieceAt(board, {row: from.row, col: col}) !== null) return false; 
         }
       } else {
         const step = to.row > from.row ? 1 : -1;
         for (let row = from.row + step; row !== to.row; row += step) {
-          if (getPieceAt(board, {row: row, col: from.col}) !== null) return false; // Obstruction if not null
+          if (getPieceAt(board, {row: row, col: from.col}) !== null) return false; 
         }
       }
-    } else { // Bishop-like move for Queen
+    } else { 
       const rowStep = to.row > from.row ? 1 : -1;
       const colStep = to.col > from.col ? 1 : -1;
       let curRow = from.row + rowStep;
       let curCol = from.col + colStep;
       while (curRow !== to.row) {
-        if (getPieceAt(board, {row: curRow, col: curCol}) !== null) return false; // Obstruction if not null
+        if (getPieceAt(board, {row: curRow, col: curCol}) !== null) return false; 
         curRow += rowStep;
         curCol += colStep;
       }
@@ -259,59 +215,38 @@ export function isValidMoveInternal(
   if (pieceType === PieceType.King) {
     const rowDiff = Math.abs(to.row - from.row);
     const colDiff = Math.abs(to.col - from.col);
-
-    // Standard 1-square king move
     if (rowDiff <= 1 && colDiff <= 1 && (rowDiff + colDiff > 0)) {
-      // Check if the move would put the king into check (already handled by the caller, but good for direct calls)
-      // const tempBoard = createBoardWithMove(board, from, to, getPieceAt(board, from)!);
-      // if (isKingInCheck(tempBoard, player, enPassantTarget, castlingRights)) { // Pass enPassantTarget
-      // return false;
-      // }
       return true; 
     }
-
-    // Castling is not an attack
     if (forAttackCheck) {
         return false; 
     }
-
-    // --- Castling move validation (forAttackCheck is false here) ---
     const kingRowForCastling = player === 'white' ? 7 : 0;
     const opponentColor = player === 'white' ? 'black' : 'white';
     const currentPlayerCastlingRights = player === 'white' ? castlingRights.white : castlingRights.black;
-
-    // 1. King must be on its original square to castle
-    if (from.row !== kingRowForCastling || from.col !== 4) {
-        return false;
-    }
-
-    // 2. King-side castling (e.g., e1g1 or e8g8)
-    if (to.row === kingRowForCastling && to.col === 6) {
-      // 2a. Check castling rights for king-side
+    // This check was preventing castling from being evaluated correctly.
+    // if (from.row !== kingRowForCastling || from.col !== 4) {
+    //     return false;
+    // }
+    if (to.row === kingRowForCastling && to.col === 6) { // King-side castling
       if (!currentPlayerCastlingRights.kingSide) {
         return false;
       }
-      // 2b. Path must be clear (f1/f8 and g1/g8 empty)
       const pathClearKingSide = getPieceAt(board, {row: kingRowForCastling, col: 5}) === null && 
                                 getPieceAt(board, {row: kingRowForCastling, col: 6}) === null;
       if (!pathClearKingSide) {
         return false;
       }
-      // 2c. Squares king passes through or lands on must not be under attack
       const isSafeKingSide =
-        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 4 }, opponentColor, enPassantTarget, castlingRights) && // e1/e8 (current)
-        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 5 }, opponentColor, enPassantTarget, castlingRights) && // f1/f8
-        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 6 }, opponentColor, enPassantTarget, castlingRights);   // g1/g8
+        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 4 }, opponentColor, enPassantTarget, castlingRights) && 
+        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 5 }, opponentColor, enPassantTarget, castlingRights) && 
+        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 6 }, opponentColor, enPassantTarget, castlingRights);   
       return isSafeKingSide;
     }
-
-    // 3. Queen-side castling (e.g., e1c1 or e8c8)
-    if (to.row === kingRowForCastling && to.col === 2) {
-      // 3a. Check castling rights for queen-side
+    if (to.row === kingRowForCastling && to.col === 2) { // Queen-side castling
       if (!currentPlayerCastlingRights.queenSide) {
         return false;
       }
-      // 3b. Path must be clear (d1/d8, c1/c8, b1/b8 empty)
       const pathClearQueenSide =
         getPieceAt(board, {row: kingRowForCastling, col: 3}) === null &&
         getPieceAt(board, {row: kingRowForCastling, col: 2}) === null &&
@@ -319,52 +254,37 @@ export function isValidMoveInternal(
       if (!pathClearQueenSide) {
         return false;
       }
-      // 3c. Squares king passes through or lands on must not be under attack
       const isSafeQueenSide =
-        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 4 }, opponentColor, enPassantTarget, castlingRights) && // e1/e8 (current)
-        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 3 }, opponentColor, enPassantTarget, castlingRights) && // d1/d8
-        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 2 }, opponentColor, enPassantTarget, castlingRights);   // c1/c8
+        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 4 }, opponentColor, enPassantTarget, castlingRights) && 
+        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 3 }, opponentColor, enPassantTarget, castlingRights) && 
+        !isPositionUnderAttack(board, { row: kingRowForCastling, col: 2 }, opponentColor, enPassantTarget, castlingRights);   
       return isSafeQueenSide;
     }
-    
-    return false; // Not a standard king move and not a valid castling move if it reached here
+    return false; 
   }
-  return false; // Default for other pieces if no valid move found by their logic
+  return false; 
 }
 
-// --- Functions to check game status ---
-
-// Checks if a position is under attack by the opponent
 function isPositionUnderAttack( 
   board: Board,
   targetPosition: Position,
-  attackerColor: Player, // Changed PlayerColor to Player
+  attackerColor: Player, 
   enPassantTarget: Position | null, 
-  castlingRights: ChessContext['castlingRights'] // Changed CastlingRights to ChessContext['castlingRights']
-  // awaitingPromotionChoice is not needed here as this checks attacks, not validates moves
+  castlingRights: ChessContext['castlingRights']
 ): boolean {
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const piecePos = { row: r, col: c };
       const piece = getPieceAt(board, piecePos);
       if (piece && getPieceColor(piece) === attackerColor) {
-        // For pawns, the attack check is different from a move.
-        // isValidMoveInternal with forAttackCheck=true handles this.
-        // For other pieces, their standard move generation also defines their attack squares.
-        // However, for kings, we must prevent infinite recursion if the other king is checking.
-        // A king cannot directly attack another king in a way that puts itself in check.
-        // The forAttackCheck=true flag in isValidMoveInternal for kings already handles
-        // that a king's "attack" is just its 1-square move capability, not castling.
+        // For King attacks, use simplified check, not full isValidMoveInternal to avoid recursion on castling checks
         if (getPieceType(piece) === PieceType.King) {
-            // Check if the king at piecePos can move to targetPosition (1-square move)
-            // This is a simplified check, not using full isValidMoveInternal to avoid recursion issues
-            // with opponent's king.
             const rowDiff = Math.abs(targetPosition.row - piecePos.row);
             const colDiff = Math.abs(targetPosition.col - piecePos.col);
             if (rowDiff <= 1 && colDiff <= 1 && (rowDiff + colDiff > 0)) {
                 return true;
             }
-        } else if (isValidMoveInternal(board, piecePos, targetPosition, attackerColor, castlingRights, true, enPassantTarget, null)) { // Pass null for awaitingPromotionChoice
+        } else if (isValidMoveInternal(board, piecePos, targetPosition, attackerColor, castlingRights, true, enPassantTarget, null)) { 
           return true;
         }
       }
@@ -385,87 +305,125 @@ function findKingPosition(board: Board, player: Player): Position | null {
   return null;
 }
 
-// Checks if the current player's king is in check
 export function isKingInCheck(
   board: Board,
-  playerColor: Player, // Changed PlayerColor to Player for consistency
+  playerColor: Player, 
   enPassantTarget: Position | null,
-  castlingRights: ChessContext['castlingRights'] // Changed CastlingRights to ChessContext['castlingRights']
-  // awaitingPromotionChoice is not needed here
+  castlingRights: ChessContext['castlingRights']
 ): boolean {
   const kingPosition = findKingPosition(board, playerColor);
   if (!kingPosition) {
-    return false; // Should not happen in a valid game state
+    // This case should ideally not happen in a valid game state
+    // console.error(\`King not found for player \${playerColor}\`);
+    return false; 
   }
   const opponentColor = playerColor === 'white' ? 'black' : 'white';
-  return isPositionUnderAttack(board, kingPosition, opponentColor, enPassantTarget, castlingRights); // Added enPassantTarget
+  return isPositionUnderAttack(board, kingPosition, opponentColor, enPassantTarget, castlingRights); 
 }
 
-// Gets all possible moves for a piece at a given position
 export function getPossibleMoves(
   board: Board,
   piecePosition: Position,
-  player: Player, // The current player
+  player: Player, 
   castlingRights: ChessContext['castlingRights'],
   enPassantTarget: Position | null,
-  awaitingPromotionChoice: Position | null // Added
+  awaitingPromotionChoice: Position | null 
 ): Position[] {
-  if (awaitingPromotionChoice) return []; // No moves if awaiting choice
-
+  if (awaitingPromotionChoice) return []; 
   const piece = getPieceAt(board, piecePosition);
   if (!piece || getPieceColor(piece) !== player) {
     return [];
   }
-
   const possibleMoves: Position[] = [];
-
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const targetPosition = { row: r, col: c };
-      // Corrected call: relying on default for forAttackCheck (false)
       if (isValidMoveInternal(board, piecePosition, targetPosition, player, castlingRights, false, enPassantTarget, awaitingPromotionChoice)) {
-        possibleMoves.push(targetPosition);
+        // After finding a valid move, ensure it doesn't leave the king in check
+        const tempBoard = createBoardWithMove(board, piecePosition, targetPosition, piece);
+        // Create a temporary castling rights object that reflects the state *after* the potential move
+        let tempCastlingRights = JSON.parse(JSON.stringify(castlingRights)) as ChessContext['castlingRights'];
+        const movedPieceType = getPieceType(piece);
+
+        if (movedPieceType === PieceType.King) {
+            if (player === 'white') {
+                tempCastlingRights.white.kingSide = false;
+                tempCastlingRights.white.queenSide = false;
+            } else {
+                tempCastlingRights.black.kingSide = false;
+                tempCastlingRights.black.queenSide = false;
+            }
+        } else if (movedPieceType === PieceType.Rook) {
+            const initialRookRow = player === 'white' ? 7 : 0;
+            if (piecePosition.row === initialRookRow) {
+                if (piecePosition.col === 0) { // Queen-side rook
+                    if (player === 'white') tempCastlingRights.white.queenSide = false;
+                    else tempCastlingRights.black.queenSide = false;
+                } else if (piecePosition.col === 7) { // King-side rook
+                    if (player === 'white') tempCastlingRights.white.kingSide = false;
+                    else tempCastlingRights.black.kingSide = false;
+                }
+            }
+        }
+        
+        // For en-passant, the target pawn is removed, this needs to be reflected in tempBoard for check validation
+        let tempEnPassantTarget = enPassantTarget;
+        if (movedPieceType === PieceType.Pawn) {
+            const movedRows = Math.abs(targetPosition.row - piecePosition.row);
+            if (movedRows === 2) {
+                // This move sets up a potential en passant for the opponent next turn
+                // For *this* turn's check validation, this new enPassantTarget isn't relevant yet.
+            } else if (enPassantTarget && 
+                       targetPosition.row === enPassantTarget.row &&
+                       targetPosition.col === enPassantTarget.col &&
+                       movedRows === 1 && 
+                       Math.abs(targetPosition.col - piecePosition.col) === 1) {
+                // This is an en-passant capture, remove the captured pawn from tempBoard
+                const capturedPawnRow = player === 'white' ? targetPosition.row + 1 : targetPosition.row - 1;
+                tempBoard[capturedPawnRow][targetPosition.col] = ''; 
+            }
+             tempEnPassantTarget = null; // En passant target is only valid for one move
+        } else {
+            tempEnPassantTarget = null; // Non-pawn moves clear en-passant target for next turn's check calc
+        }
+
+
+        if (!isKingInCheck(tempBoard, player, tempEnPassantTarget, tempCastlingRights)) {
+          possibleMoves.push(targetPosition);
+        }
       }
     }
   }
   return possibleMoves;
 }
 
-function getGameStatus(
+export function getGameStatus(
   board: Board,
   currentPlayer: Player,
   castlingRights: ChessContext['castlingRights'],
-  enPassantTarget: Position | null, // Added enPassantTarget
-  awaitingPromotionChoice: Position | null // Added
+  enPassantTarget: Position | null,
+  awaitingPromotionChoice: Position | null
 ): {
   isCheck: boolean;
   isCheckmate: boolean;
   isStalemate: boolean;
 } {
-  const check = isKingInCheck(board, currentPlayer, enPassantTarget, castlingRights); // Pass enPassantTarget
+  const check = isKingInCheck(board, currentPlayer, enPassantTarget, castlingRights);
   let checkmate = false;
   let stalemate = false;
-
-  // Check for checkmate or stalemate only if it's the current player's turn to move
   let hasLegalMoves = false;
+
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const piecePosition = { row: r, col: c };
       const piece = getPieceAt(board, piecePosition);
       if (piece && getPieceColor(piece) === currentPlayer) {
-        // Pass enPassantTarget when checking for general legal moves
-        const possibleMoves = getPossibleMoves(board, piecePosition, currentPlayer, castlingRights, enPassantTarget, awaitingPromotionChoice); // Pass awaitingPromotionChoice
-        for (const move of possibleMoves) {
-            // Simulate the move
-            const tempBoard = createBoardWithMove(board, piecePosition, move, piece);
-            // Check if this move leaves the king in check
-            if (!isKingInCheck(tempBoard, currentPlayer, enPassantTarget, castlingRights)) {
-                hasLegalMoves = true;
-                break;
-            }
+        const possibleMovesForPiece = getPossibleMoves(board, piecePosition, currentPlayer, castlingRights, enPassantTarget, awaitingPromotionChoice);
+        if (possibleMovesForPiece.length > 0) {
+          hasLegalMoves = true;
+          break; 
         }
       }
-      if (hasLegalMoves) break;
     }
     if (hasLegalMoves) break;
   }
@@ -477,108 +435,249 @@ function getGameStatus(
       stalemate = true;
     }
   }
-
   return { isCheck: check, isCheckmate: checkmate, isStalemate: stalemate };
 }
 
+function generateAlgebraicNotation(
+  board: Board, 
+  from: Position,
+  to: Position,
+  piece: Piece, 
+  isCapture: boolean,
+  isCheck: boolean,
+  isCheckmate: boolean,
+  promotedTo: PieceType | null,
+  wasCastling: { kingSide: boolean, queenSide: boolean } = { kingSide: false, queenSide: false }
+): string {
+  const pieceType = getPieceType(piece);
+  const toFile = String.fromCharCode('a'.charCodeAt(0) + to.col);
+  const toRank = (8 - to.row).toString();
+  const fromFile = String.fromCharCode('a'.charCodeAt(0) + from.col); 
+  // const fromRank = (8 - from.row).toString(); // Not always needed
+
+  if (wasCastling.kingSide) {
+    return isCheckmate ? 'O-O#' : isCheck ? 'O-O+' : 'O-O';
+  }
+  if (wasCastling.queenSide) {
+    return isCheckmate ? 'O-O-O#' : isCheck ? 'O-O-O+' : 'O-O-O';
+  }
+
+  let notation = '';
+  if (pieceType === PieceType.Pawn) {
+    if (isCapture) {
+      notation += fromFile + 'x'; 
+    }
+  } else {
+    notation += pieceType; 
+    // Add disambiguation if needed (not fully implemented here)
+    // For example, if two knights can move to the same square.
+    // This would involve checking other pieces of the same type that can move to 'to'.
+    // For simplicity, this is omitted. A full implementation would check:
+    // 1. Other pieces of same type and color.
+    // 2. If they can also move to 'to'.
+    // 3. If ambiguity exists, add fromFile, or fromRank, or both.
+    if (isCapture) {
+      notation += 'x';
+    }
+  }
+  notation += toFile + toRank; 
+  if (promotedTo) {
+    notation += '=' + promotedTo; 
+  }
+  if (isCheckmate) {
+    notation += '#';
+  } else if (isCheck) {
+    notation += '+';
+  }
+  return notation;
+}
+
+const machineConfig = {
+  initial: 'playing',
+  context: ({ input }: { input: unknown }) => {
+    // Deep clone default context to ensure no shared references
+    const baseContext = JSON.parse(JSON.stringify(defaultInitialChessContext));
+    let mergedContext: ChessContext;
+
+    // Type guard to check if input is a valid ChessContext or Partial<ChessContext>
+    if (typeof input === 'object' && input !== null) {
+      const partialInput = input as Partial<ChessContext>; // Cast to Partial<ChessContext>
+      // Merge input into a copy of the base context.
+      mergedContext = {
+        ...baseContext,
+        ...partialInput,
+        board: partialInput.board ? JSON.parse(JSON.stringify(partialInput.board)) : baseContext.board,
+        castlingRights: partialInput.castlingRights ? JSON.parse(JSON.stringify(partialInput.castlingRights)) : baseContext.castlingRights,
+        moveHistory: partialInput.moveHistory ? JSON.parse(JSON.stringify(partialInput.moveHistory)) : baseContext.moveHistory,
+        selectedPiece: partialInput.selectedPiece !== undefined ? partialInput.selectedPiece : baseContext.selectedPiece,
+        possibleMoves: partialInput.possibleMoves ? JSON.parse(JSON.stringify(partialInput.possibleMoves)) : baseContext.possibleMoves,
+        error: partialInput.error !== undefined ? partialInput.error : baseContext.error,
+        awaitingPromotionChoice: partialInput.awaitingPromotionChoice !== undefined ? partialInput.awaitingPromotionChoice : baseContext.awaitingPromotionChoice,
+        currentPlayer: partialInput.currentPlayer || baseContext.currentPlayer,
+        enPassantTarget: partialInput.enPassantTarget !== undefined ? partialInput.enPassantTarget : baseContext.enPassantTarget,
+      };
+    } else {
+      // No valid input, use the deep-copied default context
+      mergedContext = baseContext;
+    }
+
+    const gameStatus = getGameStatus(
+      mergedContext.board,
+      mergedContext.currentPlayer,
+      mergedContext.castlingRights,
+      mergedContext.enPassantTarget,
+      mergedContext.awaitingPromotionChoice
+    );
+
+    return {
+      ...mergedContext,
+      isCheck: gameStatus.isCheck,
+      isCheckmate: gameStatus.isCheckmate,
+      isStalemate: gameStatus.isStalemate,
+      gameOver: gameStatus.isCheckmate || gameStatus.isStalemate,
+      winner: gameStatus.isCheckmate ? (mergedContext.currentPlayer === 'white' ? 'black' : 'white') : null,
+    } as ChessContext; // Ensure the return type matches ChessContext
+  },
+  states: {
+    playing: {
+      on: {
+        SELECT_PIECE: {
+          actions: 'selectPieceAction',
+          guard: 'isValidSelectionGuard',
+        },
+        MOVE_PIECE: [
+          {
+            target: 'awaitingPromotion',
+            actions: 'movePieceAction',
+            guard: and(['isValidMoveTargetGuard', 'isPromotingPawnMoveGuard']),
+          },
+          {
+            actions: 'movePieceAction',
+            guard: 'isValidMoveTargetGuard',
+          }
+        ],
+        CHOOSE_PROMOTION_PIECE: {
+          target: 'playing', 
+          actions: 'promotePawnAction',
+          guard: 'isAwaitingPromotionChoiceGuard', 
+        },
+        RESET_GAME: {
+          actions: 'resetGameToInitialAction',
+          target: 'playing' 
+        }
+      },
+      always: [
+        { target: 'checkmate', guard: ({context}: {context: ChessContext}) => context.isCheckmate && context.gameOver },
+        { target: 'stalemate', guard: ({context}: {context: ChessContext}) => context.isStalemate && context.gameOver },
+      ]
+    },
+    awaitingPromotion: { 
+      on: {
+        CHOOSE_PROMOTION_PIECE: {
+          target: 'playing',
+          actions: 'promotePawnAction',
+        },
+        SELECT_PIECE: { 
+            actions: 'setPromotionErrorAction'
+        },
+        MOVE_PIECE: { 
+            actions: 'setPromotionErrorAction'
+        }
+      },
+      always: [ 
+        { target: 'checkmate', guard: ({context}: {context: ChessContext}) => context.isCheckmate && context.gameOver },
+        { target: 'stalemate', guard: ({context}: {context: ChessContext}) => context.isStalemate && context.gameOver },
+      ]
+    },
+    checkmate: {
+      type: 'final' as const,
+    },
+    stalemate: {
+      type: 'final' as const,
+    }
+  }
+} as const; // Add 'as const' here
 
 export const chessMachine = setup({
-  types: {} as {
-    context: ChessContext,
-    events: ChessEvents
+  types: {
+    context: {} as ChessContext,
+    events: {} as ChessEvents,
+    // It's often better to define input type for the machine if it expects specific input
+    // However, for this case, we'll ensure the context function handles undefined input.
   },
   actions: {
-    selectPiece: assign(({ context, event }) => {
+    selectPieceAction: assign(({ context, event }: { context: ChessContext; event: ChessEvents }) => {
       if (event.type !== 'SELECT_PIECE') return {};
       const { position } = event;
-      const piece = getPieceAt(context.board, position); // Get piece to check its color
+      const piece = getPieceAt(context.board, position); 
 
-      // If awaiting promotion choice, no piece selection allowed
-      if (context.awaitingPromotionChoice) {
-        return { error: "Choose a promotion piece first." };
-      }
+      // if (context.awaitingPromotionChoice) { // This check is better handled by states
+      //   return { error: "Choose a promotion piece first." };
+      // }
 
-      // Deselect if clicking the same piece
       if (context.selectedPiece && context.selectedPiece.row === position.row && context.selectedPiece.col === position.col) {
-        return { selectedPiece: null, possibleMoves: [], error: null };
+        return { selectedPiece: null, possibleMoves: [], error: null }; // Deselect
       }
-
-      // Check if the piece belongs to the current player
       if (!piece || getPieceColor(piece) !== context.currentPlayer) {
         return { 
-          selectedPiece: null, // Clear selection
+          selectedPiece: null, 
           possibleMoves: [], 
-          error: "Cannot select opponent's piece or empty square." // Set error
+          error: "Cannot select opponent\\'s piece or empty square." 
         };
       }
-      
       const possibleMoves = getPossibleMoves(context.board, position, context.currentPlayer, context.castlingRights, context.enPassantTarget, context.awaitingPromotionChoice);
       return { selectedPiece: position, possibleMoves, error: null };
     }),
-    movePiece: assign(({ context, event }) => {
+    movePieceAction: assign(({ context, event }:{ context: ChessContext; event: ChessEvents }) => {
       if (event.type !== 'MOVE_PIECE' || !context.selectedPiece) {
-        return { error: "Internal error: Invalid movePiece call." };
+        // This should ideally be caught by guards, but as a fallback:
+        return { error: "Invalid move event or no piece selected." };
       }
-      const targetPosition = event.position;
-      const pieceToMove = getPieceAt(context.board, context.selectedPiece);
-      if (!pieceToMove) {
-        return { error: "Internal error: No piece to move." };
-      }
-      
-      const newBoard = context.board.map(row => [...row]); // Changed let to const
-      const startPos = context.selectedPiece;
+      const fromPos = context.selectedPiece;
+      const toPos = event.position;
       const player = context.currentPlayer;
-      const pieceTypeMoved = getPieceType(pieceToMove);
-      // let nextPlayerTurn = player === 'white' ? 'black' : 'white'; // Removed unused variable
-      let promotionPending = false;
+      const pieceBeingMoved = getPieceAt(context.board, fromPos);
+
+      if (!pieceBeingMoved) {
+        return { error: "No piece at selected position." }; 
+      }
+
+      const boardBeforeMove = context.board.map((row: Piece[]) => [...row]);
+      const castlingRightsBeforeMove = JSON.parse(JSON.stringify(context.castlingRights));
+      const enPassantTargetBeforeMove = context.enPassantTarget ? { ...context.enPassantTarget } : null;
+      
+      let newBoard = createBoardWithMove(context.board, fromPos, toPos, pieceBeingMoved);
+      const pieceTypeMoved = getPieceType(pieceBeingMoved);
       let newAwaitingPromotionChoice: Position | null = null;
-
-      // Standard piece move (will be overwritten for castling below if applicable)
-      newBoard[targetPosition.row][targetPosition.col] = pieceToMove;
-      newBoard[startPos.row][startPos.col] = '';
-
       const newCastlingRights = JSON.parse(JSON.stringify(context.castlingRights)) as ChessContext['castlingRights'];
-      let newEnPassantTarget: Position | null = null; // Default to null, will be set if applicable
+      let newEnPassantTarget: Position | null = null; 
+      let wasEnPassantCapture = false;
 
       if (pieceTypeMoved === PieceType.Pawn) {
-        const movedRows = Math.abs(targetPosition.row - startPos.row);
-        // Set new enPassantTarget if pawn moved two squares
+        const movedRows = Math.abs(toPos.row - fromPos.row);
         if (movedRows === 2) {
-          newEnPassantTarget = { row: (startPos.row + targetPosition.row) / 2, col: startPos.col };
-        } else {
-          // If it's not a two-square pawn move, clear any existing enPassantTarget from previous turn.
-          // This is implicitly handled by newEnPassantTarget being null by default unless set by a 2-square move.
+          newEnPassantTarget = { row: (fromPos.row + toPos.row) / 2, col: fromPos.col };
         }
-
-        // Handle en passant capture: remove the captured pawn
-        if (context.enPassantTarget &&
-            targetPosition.row === context.enPassantTarget.row &&
-            targetPosition.col === context.enPassantTarget.col &&
-            movedRows === 1 && // Must be a single diagonal step to the en passant target square
-            Math.abs(targetPosition.col - startPos.col) === 1) { // Must be a diagonal move
-            const capturedPawnRow = player === 'white' ? targetPosition.row + 1 : targetPosition.row - 1;
-            newBoard[capturedPawnRow][targetPosition.col] = ''; // Remove en passanted pawn
-            // newEnPassantTarget remains null as an en passant capture does not create a new en passant opportunity
+        // En-passant capture
+        if (context.enPassantTarget && 
+            toPos.row === context.enPassantTarget.row &&
+            toPos.col === context.enPassantTarget.col &&
+            movedRows === 1 && 
+            Math.abs(toPos.col - fromPos.col) === 1) { 
+          const capturedPawnRow = player === 'white' ? toPos.row + 1 : toPos.row - 1;
+          newBoard[capturedPawnRow][toPos.col] = ''; 
+          wasEnPassantCapture = true;
         }
-
-        // Pawn Promotion Logic
         const promotionRank = player === 'white' ? 0 : 7;
-        if (targetPosition.row === promotionRank) {
-          // Instead of auto-promoting, set awaitingPromotionChoice
-          // The actual piece change will happen on CHOOSE_PROMOTION_PIECE event
-          promotionPending = true;
-          newAwaitingPromotionChoice = { ...targetPosition };
-          // Don't change the piece on the board yet.
-          // newBoard[targetPosition.row][targetPosition.col] = player === 'white' ? 'wQ' : 'bQ'; // Promote to Queen
+        if (toPos.row === promotionRank) {
+          newAwaitingPromotionChoice = { ...toPos }; // Signal that promotion is pending
         }
       } else {
-        // If any other piece moved, or if it was a pawn move that wasn\\'t a 2-square advance,
-        // the en passant target from the previous turn is no longer valid.
-        // This is handled by newEnPassantTarget being initialized to null and only set for 2-square pawn moves.
+        newEnPassantTarget = null; // Any other move clears en passant target
       }
 
+      // Update castling rights
       if (pieceTypeMoved === PieceType.King) {
-        // Update castling rights whenever the king moves
         if (player === 'white') {
           newCastlingRights.white.kingSide = false;
           newCastlingRights.white.queenSide = false;
@@ -586,305 +685,313 @@ export const chessMachine = setup({
           newCastlingRights.black.kingSide = false;
           newCastlingRights.black.queenSide = false;
         }
-
-        // Handle castling: move king and rook to their final positions
-        const kingMoveDistance = Math.abs(targetPosition.col - startPos.col);
-        if (kingMoveDistance === 2) { // This signifies a castling move
-          const kingRow = startPos.row;
-          let rookOriginalPos: Position, rookNewPos: Position, rookPiece: Piece | null;
-
-          if (targetPosition.col === 6) { // King-side castle (e.g., e1g1 or e8g8)
-            // King is already placed at targetPosition (g1/g8) by the standard move above
-            // Rook moves from h1/h8 to f1/f8
-            rookOriginalPos = { row: kingRow, col: 7 };
-            rookNewPos = { row: kingRow, col: 5 };
-            rookPiece = getPieceAt(context.board, rookOriginalPos); // Get rook from original board state
-            if (rookPiece) {
-              newBoard[rookNewPos.row][rookNewPos.col] = rookPiece;
-              newBoard[rookOriginalPos.row][rookOriginalPos.col] = '';
-            }
-          } else if (targetPosition.col === 2) { // Queen-side castle (e.g., e1c1 or e8c8)
-            // King is already placed at targetPosition (c1/c8) by the standard move above
-            // Rook moves from a1/a8 to d1/d8
-            rookOriginalPos = { row: kingRow, col: 0 };
-            rookNewPos = { row: kingRow, col: 3 };
-            rookPiece = getPieceAt(context.board, rookOriginalPos); // Get rook from original board state
-            if (rookPiece) {
-              newBoard[rookNewPos.row][rookNewPos.col] = rookPiece;
-              newBoard[rookOriginalPos.row][rookOriginalPos.col] = '';
-            }
-          }
-        }
       } else if (pieceTypeMoved === PieceType.Rook) {
-        // Update castling rights if a rook moves from its starting square
-        const initialPlayerRookRow = player === 'white' ? 7 : 0;
-        if (startPos.row === initialPlayerRookRow) {
-          if (startPos.col === 0) { // Queen's rook a1/a8
+        const initialRookRow = player === 'white' ? 7 : 0;
+        if (fromPos.row === initialRookRow) {
+          if (fromPos.col === 0) { // Queen-side rook moved
             if (player === 'white') newCastlingRights.white.queenSide = false;
             else newCastlingRights.black.queenSide = false;
-          } else if (startPos.col === 7) { // King's rook h1/h8
+          } else if (fromPos.col === 7) { // King-side rook moved
             if (player === 'white') newCastlingRights.white.kingSide = false;
             else newCastlingRights.black.kingSide = false;
           }
         }
       }
-      
-      // Revoke castling rights if a rook is captured on its starting square
-      const pieceOnTargetSquareOriginalBoard = getPieceAt(context.board, targetPosition);
-      if (pieceOnTargetSquareOriginalBoard) {
-          const capturedPieceType = getPieceType(pieceOnTargetSquareOriginalBoard);
-          const capturedPieceColor = getPieceColor(pieceOnTargetSquareOriginalBoard);
+      // If a rook is captured, update castling rights for the opponent
+      const pieceOnToSquareOriginalBoard = getPieceAt(boardBeforeMove, toPos); 
+      if (pieceOnToSquareOriginalBoard) {
+          const capturedPieceType = getPieceType(pieceOnToSquareOriginalBoard);
+          const capturedPieceColor = getPieceColor(pieceOnToSquareOriginalBoard);
           if (capturedPieceType === PieceType.Rook) {
-              if (capturedPieceColor === 'white') {
-                  if (targetPosition.row === 7 && targetPosition.col === 0) newCastlingRights.white.queenSide = false;
-                  else if (targetPosition.row === 7 && targetPosition.col === 7) newCastlingRights.white.kingSide = false;
-              } else if (capturedPieceColor === 'black') {
-                  if (targetPosition.row === 0 && targetPosition.col === 0) newCastlingRights.black.queenSide = false;
-                  else if (targetPosition.row === 0 && targetPosition.col === 7) newCastlingRights.black.kingSide = false;
+              const opponentInitialRookRow = capturedPieceColor === 'white' ? 7 : 0;
+              if (toPos.row === opponentInitialRookRow) {
+                  if (toPos.col === 0) { // Opponent's queen-side rook captured
+                      if (capturedPieceColor === 'white') newCastlingRights.white.queenSide = false;
+                      else newCastlingRights.black.queenSide = false;
+                  } else if (toPos.col === 7) { // Opponent's king-side rook captured
+                      if (capturedPieceColor === 'white') newCastlingRights.white.kingSide = false;
+                      else newCastlingRights.black.kingSide = false;
+                  }
               }
           }
       }
+      
+      let actualWasCastling = { kingSide: false, queenSide: false };
+      if (pieceTypeMoved === PieceType.King && Math.abs(toPos.col - fromPos.col) === 2) {
+        const kingRow = fromPos.row;
+        let rookOriginalPos: Position, rookNewPos: Position;
+        if (toPos.col === 6) { // King-side castling
+          actualWasCastling.kingSide = true;
+          rookOriginalPos = { row: kingRow, col: 7 };
+          rookNewPos = { row: kingRow, col: 5 };
+        } else { // Queen-side castling (toPos.col === 2)
+          actualWasCastling.queenSide = true;
+          rookOriginalPos = { row: kingRow, col: 0 };
+          rookNewPos = { row: kingRow, col: 3 };
+        }
+        const rookPiece = getPieceAt(boardBeforeMove, rookOriginalPos); // Rook should be on original board
+        if (rookPiece) {
+          newBoard[rookNewPos.row][rookNewPos.col] = rookPiece;
+          newBoard[rookOriginalPos.row][rookOriginalPos.col] = '';
+        }
+      }
 
-      const opponent: Player = player === 'white' ? 'black' : 'white';
-      // Game status should be calculated based on the board *after* the move,
-      // but *before* promotion choice if one is pending.
-      // If promotion is pending, the turn doesn't switch yet.
-      const gameStatusPlayerForNextTurn = promotionPending ? player : opponent;
-      const gameStatus = getGameStatus(newBoard, gameStatusPlayerForNextTurn, newCastlingRights, newEnPassantTarget, newAwaitingPromotionChoice);
+      const opponentPlayer = player === 'white' ? 'black' : 'white';
+      // If awaiting promotion, the current player doesn't change yet.
+      // Game status should be checked for the *next* player if not promoting.
+      const playerForStatusCheck = newAwaitingPromotionChoice ? player : opponentPlayer;
+      const gameStatusAfterMove = getGameStatus(
+        newBoard,
+        playerForStatusCheck, // Check status for the player whose turn it would be
+        newCastlingRights,
+        newEnPassantTarget, // This is the target for the *next* player
+        null // Promotion choice is handled by the newAwaitingPromotionChoice flag
+      );
+      
+      let actualIsCapture = (pieceOnToSquareOriginalBoard !== null && getPieceColor(pieceOnToSquareOriginalBoard) !== player) || wasEnPassantCapture;
+
+      const moveNotationString = generateAlgebraicNotation(
+        boardBeforeMove, 
+        fromPos,
+        toPos,
+        pieceBeingMoved,
+        actualIsCapture,
+        // Check/checkmate status is for the opponent *after* this move
+        // If current player is white, and white moves, check status is for black.
+        getGameStatus(newBoard, opponentPlayer, newCastlingRights, newEnPassantTarget, null).isCheck, 
+        getGameStatus(newBoard, opponentPlayer, newCastlingRights, newEnPassantTarget, null).isCheckmate,
+        null, // Promotion piece type is added later by promotePawnAction
+        actualWasCastling
+      );
+
+      const newMoveRecord: MoveRecord = {
+        from: fromPos,
+        to: toPos,
+        piece: pieceBeingMoved,
+        notation: moveNotationString,
+        boardBefore: boardBeforeMove, 
+        boardAfter: newBoard.map((row: Piece[]) => [...row]), // Store state before potential promotion
+        isCheck: gameStatusAfterMove.isCheck, // This is check status for playerForStatusCheck
+        isCheckmate: gameStatusAfterMove.isCheckmate, // This is for playerForStatusCheck
+        isStalemate: gameStatusAfterMove.isStalemate, // This is for playerForStatusCheck
+        castlingRightsBefore: castlingRightsBeforeMove,
+        enPassantTargetBefore: enPassantTargetBeforeMove,
+      };
+      const updatedMoveHistory = [...context.moveHistory, newMoveRecord];
 
       return {
         board: newBoard,
-        currentPlayer: promotionPending ? player : opponent, // Player doesn't change if promotion is pending
+        currentPlayer: newAwaitingPromotionChoice ? player : opponentPlayer,
         selectedPiece: null,
         possibleMoves: [],
         error: null,
         castlingRights: newCastlingRights,
-        enPassantTarget: newEnPassantTarget, 
-        awaitingPromotionChoice: newAwaitingPromotionChoice, // Set this
-        isCheck: gameStatus.isCheck, 
-        isCheckmate: gameStatus.isCheckmate,
-        isStalemate: gameStatus.isStalemate,
-        gameOver: gameStatus.isCheckmate || gameStatus.isStalemate, // Game over only if checkmate/stalemate, not just promotion
-        winner: gameStatus.isCheckmate ? player : null, // Winner is the current player if they checkmated
+        enPassantTarget: newAwaitingPromotionChoice ? context.enPassantTarget : newEnPassantTarget, // Preserve EPT if promoting, else update
+        awaitingPromotionChoice: newAwaitingPromotionChoice, // Set if pawn reached promotion rank
+        // Game status (isCheck, isCheckmate, etc.) should reflect the state for the *new* current player.
+        // If awaiting promotion, these are based on the current player's move.
+        // If not awaiting promotion, these are based on the opponent's potential situation.
+        isCheck: getGameStatus(newBoard, newAwaitingPromotionChoice ? player : opponentPlayer, newCastlingRights, newEnPassantTarget, null).isCheck,
+        isCheckmate: getGameStatus(newBoard, newAwaitingPromotionChoice ? player : opponentPlayer, newCastlingRights, newEnPassantTarget, null).isCheckmate,
+        isStalemate: getGameStatus(newBoard, newAwaitingPromotionChoice ? player : opponentPlayer, newCastlingRights, newEnPassantTarget, null).isStalemate,
+        gameOver: getGameStatus(newBoard, newAwaitingPromotionChoice ? player : opponentPlayer, newCastlingRights, newEnPassantTarget, null).isCheckmate || 
+                  getGameStatus(newBoard, newAwaitingPromotionChoice ? player : opponentPlayer, newCastlingRights, newEnPassantTarget, null).isStalemate,
+        winner: getGameStatus(newBoard, newAwaitingPromotionChoice ? player : opponentPlayer, newCastlingRights, newEnPassantTarget, null).isCheckmate ? player : null, 
+        moveHistory: updatedMoveHistory,
       };
     }),
-    resetGameToInitial: assign(() => {
-      // Deep clone the defaultInitialChessContext when the action is executed
-      return JSON.parse(JSON.stringify(defaultInitialChessContext));
+    resetGameToInitialAction: assign(() => {
+      const newContext = JSON.parse(JSON.stringify(defaultInitialChessContext));
+      newContext.moveHistory = []; 
+      return newContext;
     }),
-    promotePawn: assign(({ context, event }) => {
+    promotePawnAction: assign(({ context, event }: { context: ChessContext; event: ChessEvents }) => {
       if (event.type !== 'CHOOSE_PROMOTION_PIECE' || !context.awaitingPromotionChoice) {
-        return { error: "Cannot promote pawn at this time." };
+        return { error: "Cannot promote pawn at this time." }; // Ensure this returns Partial<ChessContext>
       }
-      const { piece: chosenPieceType } = event;
+      const { piece: chosenPieceType } = event; 
       const promotionPos = context.awaitingPromotionChoice;
-      const player = context.currentPlayer;
-
-      const newBoard = context.board.map(row => [...row]);
+      const player = context.currentPlayer; // Player who is promoting
+      
+      let newBoard = context.board.map((row: Piece[]) => [...row]); // Take board from before promotion choice
       const promotedPiece: Piece = (player === 'white' ? 'w' : 'b') + chosenPieceType;
       newBoard[promotionPos.row][promotionPos.col] = promotedPiece;
 
-      // After promotion, determine game status for the opponent
       const opponent: Player = player === 'white' ? 'black' : 'white';
-      const gameStatus = getGameStatus(newBoard, opponent, context.castlingRights, null /* enPassantTarget is cleared after a move */, null /* promotion choice is done */);
+      // Status after promotion, for the opponent
+      const gameStatus = getGameStatus(newBoard, opponent, context.castlingRights, null, null); 
       
+      const updatedMoveHistory = [...context.moveHistory];
+      const lastMoveIndex = updatedMoveHistory.length - 1;
+      if (lastMoveIndex >= 0) {
+        const lastMove = { ...updatedMoveHistory[lastMoveIndex] };
+        // Update notation of the pawn move that led to promotion
+        lastMove.notation = lastMove.notation.split(/[+#]/)[0]; // Remove previous check/mate indicators if any
+        lastMove.notation += `=${chosenPieceType}`; // Corrected template literal
+        if (gameStatus.isCheckmate) { // Checkmate for opponent
+          lastMove.notation += '#';
+        } else if (gameStatus.isCheck) { // Check for opponent
+          lastMove.notation += '+';
+        }
+        // Update the boardAfter in the last move record to reflect the promoted piece
+        lastMove.boardAfter = newBoard.map((row: Piece[]) => [...row]); 
+        lastMove.isCheck = gameStatus.isCheck; // Opponent is in check
+        lastMove.isCheckmate = gameStatus.isCheckmate; // Opponent is in checkmate
+        lastMove.isStalemate = gameStatus.isStalemate; // Opponent is in stalemate
+        updatedMoveHistory[lastMoveIndex] = lastMove;
+      }
+
       return {
         board: newBoard,
-        awaitingPromotionChoice: null, // Clear the pending choice
-        currentPlayer: opponent, // Switch to opponent
-        isCheck: gameStatus.isCheck,
+        awaitingPromotionChoice: null, // Promotion complete
+        currentPlayer: opponent, // Turn switches to opponent
+        isCheck: gameStatus.isCheck, // Status for the new current player (opponent)
         isCheckmate: gameStatus.isCheckmate,
         isStalemate: gameStatus.isStalemate,
         gameOver: gameStatus.isCheckmate || gameStatus.isStalemate,
-        winner: gameStatus.isCheckmate ? player : null, // If this promotion resulted in checkmate
-        error: null,
+        winner: gameStatus.isCheckmate ? player : null, // Winner is the player who promoted if it's checkmate
+        error: null, 
+        moveHistory: updatedMoveHistory,
+        selectedPiece: null, 
+        possibleMoves: [], 
+        enPassantTarget: null, 
       };
-    })
+    }),
+    setPromotionErrorAction: assign({
+      error: "Must choose a promotion piece.",
+      selectedPiece: null,
+      possibleMoves: []
+    }),
   },
   guards: {
-    isValidSelection: ({ context, event }) => {
+    isValidSelectionGuard: ({ context, event }: { context: ChessContext; event: ChessEvents }): boolean => {
       if (event.type !== 'SELECT_PIECE') return false;
+      // if (context.awaitingPromotionChoice) return false; // Handled by state based logic now
       const piece = getPieceAt(context.board, event.position);
-      return !!piece && getPieceColor(piece) === context.currentPlayer;
+      if (!piece || getPieceColor(piece) !== context.currentPlayer) {
+        return false;
+      }
+      return true;
     },
-    isValidMoveTarget: ({ context, event }) => {
-      if (event.type !== 'MOVE_PIECE' || !context.selectedPiece) return false;
-      // const piece = getPieceAt(context.board, context.selectedPiece); // Not needed for the call
-      // if (!piece) return false; // Not needed
+    isValidMoveTargetGuard: ({ context, event }: { context: ChessContext; event: ChessEvents }): boolean => {
+      if (event.type !== 'MOVE_PIECE' || !context.selectedPiece) {
+        return false;
+      }
+      // if (context.awaitingPromotionChoice) return false; // Handled by state based logic
 
-      // Prevent moves if awaiting promotion choice
-      if (context.awaitingPromotionChoice) return false;
+      const { board, selectedPiece, currentPlayer, castlingRights, enPassantTarget, awaitingPromotionChoice } = context;
+      const toPosition = event.position;
 
-      // Corrected arguments for isValidMoveInternal:
-      // board, from, to, player, castlingRights, forAttackCheck (false for a move), enPassantTarget
-      return isValidMoveInternal(
-        context.board,
-        context.selectedPiece,    // from
-        event.position,           // to
-        context.currentPlayer,    // player (whose turn it is)
-        context.castlingRights,   // castlingRights
-        false,                    // forAttackCheck (it's a move, not just an attack check)
-        context.enPassantTarget,   // enPassantTarget from current context (before this move)
-        context.awaitingPromotionChoice // Pass this through
-      );
+      if (!isValidMoveInternal(board, selectedPiece, toPosition, currentPlayer, castlingRights, false, enPassantTarget, awaitingPromotionChoice)) {
+        return false;
+      }
+      
+      // Check if the move would leave the king in check
+      const pieceBeingMoved = getPieceAt(board, selectedPiece);
+      if (!pieceBeingMoved) return false; // Should not happen if selectedPiece is valid
+
+      let tempBoard = createBoardWithMove(board, selectedPiece, toPosition, pieceBeingMoved);
+      let tempCastlingRights = JSON.parse(JSON.stringify(castlingRights)) as ChessContext['castlingRights'];
+      const movedPieceType = getPieceType(pieceBeingMoved);
+
+      if (movedPieceType === PieceType.King) {
+          if (currentPlayer === 'white') {
+              tempCastlingRights.white.kingSide = false;
+              tempCastlingRights.white.queenSide = false;
+          } else {
+              tempCastlingRights.black.kingSide = false;
+              tempCastlingRights.black.queenSide = false;
+          }
+          // If castling, move the rook on tempBoard for check validation
+          if (Math.abs(toPosition.col - selectedPiece.col) === 2) {
+            const kingRow = selectedPiece.row;
+            let rookOriginalCol: number, rookNewCol: number;
+            if (toPosition.col === 6) { // King-side
+                rookOriginalCol = 7; rookNewCol = 5;
+            } else { // Queen-side
+                rookOriginalCol = 0; rookNewCol = 3;
+            }
+            const rook = getPieceAt(board, {row: kingRow, col: rookOriginalCol});
+            if (rook) {
+                tempBoard[kingRow][rookNewCol] = rook;
+                tempBoard[kingRow][rookOriginalCol] = '';
+            }
+          }
+      } else if (movedPieceType === PieceType.Rook) {
+          const initialRookRow = currentPlayer === 'white' ? 7 : 0;
+          if (selectedPiece.row === initialRookRow) {
+              if (selectedPiece.col === 0) { 
+                  if (currentPlayer === 'white') tempCastlingRights.white.queenSide = false;
+                  else tempCastlingRights.black.queenSide = false;
+              } else if (selectedPiece.col === 7) { 
+                  if (currentPlayer === 'white') tempCastlingRights.white.kingSide = false;
+                  else tempCastlingRights.black.kingSide = false;
+              }
+          }
+      }
+      
+      let tempEnPassantTarget = enPassantTarget;
+      // If the move is an en-passant capture, remove the captured pawn from tempBoard
+      if (movedPieceType === PieceType.Pawn && enPassantTarget &&
+          toPosition.row === enPassantTarget.row && toPosition.col === enPassantTarget.col &&
+          Math.abs(toPosition.col - selectedPiece.col) === 1) {
+          const capturedPawnRow = currentPlayer === 'white' ? toPosition.row + 1 : toPosition.row - 1;
+          tempBoard[capturedPawnRow][toPosition.col] = '';
+          tempEnPassantTarget = null; // En passant capture consumes the target
+      } else if (movedPieceType === PieceType.Pawn && Math.abs(toPosition.row - selectedPiece.row) !== 2) {
+          tempEnPassantTarget = null; // Single pawn push or capture that is not en-passant
+      } else if (movedPieceType !== PieceType.Pawn) {
+          tempEnPassantTarget = null; // Non-pawn move
+      }
+      // If a pawn moves two squares, enPassantTarget is set for the *next* turn,
+      // so for *this* turn's check validation, the *current* enPassantTarget is used.
+
+
+      if (isKingInCheck(tempBoard, currentPlayer, tempEnPassantTarget, tempCastlingRights)) {
+        return false;
+      }
+      return true;
     },
-    isValidMoveGuard: ({ context, event }) => {
+    isPromotingPawnMoveGuard: ({ context, event }: { context: ChessContext; event: ChessEvents }): boolean => {
       if (event.type !== 'MOVE_PIECE') return false;
-      // This guard expects event.from and event.to, which is not standard for MOVE_PIECE
-      // Assuming this guard is intended for a different event structure or should be removed/reconciled
-      // with isValidMoveTarget. For now, let's assume MOVE_PIECE uses isValidMoveTarget.
-      // If this guard IS used for MOVE_PIECE, it needs context.selectedPiece for 'from'
-      // and event.position for 'to'.
-      // const { from, to } = event; // This structure is problematic for standard MOVE_PIECE
-      // For safety, returning false if this guard is somehow hit by a standard MOVE_PIECE event
-      // without the expected 'from' and 'to' properties on the event itself.
-      if (!('from' in event && 'to' in event && event.from && event.to)) {
-          // This indicates a mismatch in event structure if used for the primary MOVE_PIECE
-          // without the expected 'from' and 'to' properties on the event itself.
-          // console.warn("isValidMoveGuard called with unexpected event structure for MOVE_PIECE");
+      if (!context.selectedPiece) return false; 
+      
+      const toPosition = event.position;
+      const pieceOnBoard = getPieceAt(context.board, context.selectedPiece);
+      if (!pieceOnBoard) return false; 
+      
+      const pieceType = getPieceType(pieceOnBoard);
+      const player = context.currentPlayer;
+      const promotionRank = player === 'white' ? 0 : 7;
+      
+      if (pieceType === PieceType.Pawn && toPosition.row === promotionRank) {
+          const fromPosition = context.selectedPiece;
+          const dRow = toPosition.row - fromPosition.row;
+          const dCol = toPosition.col - fromPosition.col;
+          const direction = player === 'white' ? -1 : 1;
+
+          if (dRow !== direction) return false;
+
+          if (dCol === 0) { // Forward move
+              return getPieceAt(context.board, toPosition) === null;
+          } else if (Math.abs(dCol) === 1) { // Capture or en-passant to promotion
+              const targetPiece = getPieceAt(context.board, toPosition);
+              const targetPieceColor = targetPiece ? getPieceColor(targetPiece) : null;
+              const isCaptureOfOpponentPiece = targetPieceColor !== null && targetPieceColor !== player;
+              const isEnPassantTarget = !!(context.enPassantTarget && // Coerce to boolean
+                                       toPosition.row === context.enPassantTarget.row &&
+                                       toPosition.col === context.enPassantTarget.col);
+              return isCaptureOfOpponentPiece || isEnPassantTarget;
+          }
           return false; 
       }
-      // Assuming event.from and event.to are correctly populated if this guard is used by a specific event
-      // Type assertion to satisfy ESLint instead of 'as any'
-      const specificEvent = event as ChessEvents & { from: Position; to: Position };
-      return isValidMoveInternal(context.board, specificEvent.from, specificEvent.to, context.currentPlayer, context.castlingRights, false, context.enPassantTarget, context.awaitingPromotionChoice);
+      return false;
     },
-    canSelectPieceGuard: ({ context, event }) => {
-      if (event.type !== 'SELECT_PIECE') return false;
-      if (context.awaitingPromotionChoice) return false; // Cannot select if awaiting promotion
-      const piece = getPieceAt(context.board, event.position);
-      if (!piece) return false;
-      return getPieceColor(piece) === context.currentPlayer;
-    },
-    isGameOverGuard: ({context}) => {
-      return context.gameOver;
+    isAwaitingPromotionChoiceGuard: ({ context }: { context: ChessContext }): boolean => {
+        // This guard is used for the CHOOSE_PROMOTION_PIECE event transition.
+        // It ensures that the machine is indeed waiting for a promotion choice.
+        return !!context.awaitingPromotionChoice;
     }
   }
-}).createMachine({
-  id: 'chess',
-  context: ({ input }) => { // input type will be inferred from createMachine.types.input
-    // Deep copy default initial context first
-    const initialContext = JSON.parse(JSON.stringify(defaultInitialChessContext));
-    // Check if input is provided and has properties
-    if (input && Object.keys(input).length > 0) {
-      // If input is provided, deep copy it and merge with the deep-copied default context
-      return { ...initialContext, ...JSON.parse(JSON.stringify(input)) };
-    }
-    return initialContext; // Return deep-copied default context if no input or empty input
-  },
-  initial: 'playing',
-  states: {
-    playing: {
-      initial: 'awaitingSelection',
-      states: {
-        awaitingSelection: {
-          on: {
-            SELECT_PIECE: [
-              {
-                target: 'pieceActuallySelected',
-                actions: 'selectPiece', // This action now handles the error assignment internally if selection is invalid
-                guard: 'isValidSelection', // This guard ensures the piece belongs to the current player
-              },
-              { // Fallback if isValidSelection is false (e.g. clicked empty or opponent)
-                target: 'awaitingSelection', 
-                actions: assign({ // Explicitly assign error here if guard fails
-                  selectedPiece: null,
-                  possibleMoves: [],
-                  error: "Cannot select opponent's piece or empty square."
-                }),
-              }
-            ],
-            RESET_GAME: {
-              target: 'awaitingSelection', // Corrected: Target sibling/self state
-              actions: 'resetGameToInitial',
-            },
-          },
-        },
-        pieceActuallySelected: {
-          on: {
-            SELECT_PIECE: [
-              {
-                target: 'pieceActuallySelected', // Target self for re-selection
-                actions: 'selectPiece',
-                guard: 'isValidSelection',
-              },
-              {
-                target: 'awaitingSelection', // Transition back if selection is invalid or piece is deselected
-                actions: 'selectPiece', // selectPiece handles deselection by returning selectedPiece: null
-              }
-            ],
-            MOVE_PIECE: [
-              {
-                target: 'awaitingPromotionChoice', // Transition to awaitingPromotionChoice if move results in promotion
-                actions: ['movePiece'],
-                guard: ({ context, event }) => {
-                  if (event.type !== 'MOVE_PIECE' || !context.selectedPiece) return false;
-                  if (!isValidMoveInternal(context.board, context.selectedPiece, event.position, context.currentPlayer, context.castlingRights, false, context.enPassantTarget, context.awaitingPromotionChoice)) return false;
-                  
-                  const pieceToMove = getPieceAt(context.board, context.selectedPiece);
-                  if (!pieceToMove || getPieceType(pieceToMove) !== PieceType.Pawn) return false;
-                  
-                  const promotionRank = context.currentPlayer === 'white' ? 0 : 7;
-                  return event.position.row === promotionRank;
-                },
-              },
-              {
-                target: 'awaitingSelection', 
-                actions: ['movePiece'],
-                guard: 'isValidMoveTarget', // Standard move
-              },
-              {
-                target: 'awaitingSelection', 
-                actions: assign({ error: "That move is not allowed!" }),
-              }
-            ],
-            RESET_GAME: {
-              target: 'awaitingSelection', 
-              actions: 'resetGameToInitial',
-            },
-          },
-        },
-        awaitingPromotionChoice: { // New state for handling promotion choice
-          on: {
-            CHOOSE_PROMOTION_PIECE: {
-              target: 'awaitingSelection',
-              actions: 'promotePawn',
-              // Add a guard here if needed, e.g., to validate the chosen piece type
-            },
-            // Potentially handle RESET_GAME here as well
-            RESET_GAME: {
-              target: 'awaitingSelection',
-              actions: 'resetGameToInitial',
-            },
-            // Ignore SELECT_PIECE and MOVE_PIECE while in this state, or handle with an error
-            SELECT_PIECE: { actions: assign({ error: "Choose a promotion piece." }) },
-            MOVE_PIECE: { actions: assign({ error: "Choose a promotion piece." }) },
-          }
-        }
-      },
-    },
-  },
-  types: { // These types are for createMachine
-    context: {} as ChessContext,
-    events: {} as ChessEvents,
-    input: {} as Partial<ChessContext> | undefined // Changed: Allow TInput to be undefined
-  }
-});
-
-export const initialBoard = defaultInitialChessContext.board;
-
-// Export locally defined helper functions and constants 
-// that are not individually exported earlier in the file.
-export {
-  createBoardWithMove, defaultInitialChessContext // This was not individually exported
-  , // This was not individually exported
-  findKingPosition,
-  getGameStatus, getPieceAt,
-  getPieceColor,
-  getPieceType, isPositionUnderAttack
-};
-
-// Re-export types from chessTypes.ts if this module is intended to act as a barrel file.
-// This uses the 'export type' syntax which is correct for types, especially with isolatedModules.
-  export type { ChessContext, ChessEvents, Position } from './chessTypes';
+}).createMachine(machineConfig);
 

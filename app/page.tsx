@@ -23,6 +23,7 @@ export default function Home() {
   const winner = state.context?.winner || null;
   const awaitingPromotionChoice = state.context?.awaitingPromotionChoice || null;
   const enPassantTarget = state.context?.enPassantTarget || null; // Added for isKingInCheck calls
+  const moveHistory = useMemo(() => state.context?.moveHistory || [], [state.context?.moveHistory]); // Added for game history
 
   // Show toast when error changes
   useEffect(() => {
@@ -304,6 +305,18 @@ export default function Home() {
     send({ type: 'CHOOSE_PROMOTION_PIECE', piece });
   };
 
+  // Format move history for display
+  const formattedMoveHistory = useMemo(() => {
+    const history = [];
+    for (let i = 0; i < moveHistory.length; i += 2) {
+      const moveNumber = Math.floor(i / 2) + 1;
+      const whiteMove = moveHistory[i]?.notation || '';
+      const blackMove = moveHistory[i + 1]?.notation || '';
+      history.push({ moveNumber, whiteMove, blackMove });
+    }
+    return history;
+  }, [moveHistory]);
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-900">
       <div className="z-10 w-full max-w-2xl items-center justify-between font-mono text-sm flex flex-col gap-6">
@@ -451,6 +464,33 @@ export default function Home() {
             Reset Game
           </button>
         </div>
+        
+        {/* Move History Display */}
+        {formattedMoveHistory.length > 0 && (
+          <div className="mt-6 w-full max-w-md bg-gray-800 p-4 rounded-lg shadow-lg">
+            <h2 className="text-xl font-semibold text-white mb-3 text-center">Move History</h2>
+            <div className="max-h-48 overflow-y-auto text-sm text-gray-300">
+              <table className="w-full table-fixed">
+                <thead>
+                  <tr className="text-left text-gray-400">
+                    <th className="w-1/6 pb-1">#</th>
+                    <th className="w-2/5 pb-1">White</th>
+                    <th className="w-2/5 pb-1">Black</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formattedMoveHistory.map((entry, index) => (
+                    <tr key={index} className={`${index % 2 === 0 ? 'bg-gray-700 bg-opacity-50' : ''}`}>
+                      <td className="py-1 px-2 font-medium">{entry.moveNumber}.</td>
+                      <td className="py-1 px-2">{entry.whiteMove}</td>
+                      <td className="py-1 px-2">{entry.blackMove}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         
         {/* Game Over Overlay */}
         {gameOver && (
